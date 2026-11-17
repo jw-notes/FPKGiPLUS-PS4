@@ -1,0 +1,8 @@
+Mozilla public root certificates distributed by curl.
+Source: https://curl.se/ca/cacert.pem
+Documentation: https://curl.se/docs/caextract.html
+Mozilla source date: 2026-11-05
+Certificates: 118
+SHA-256: 427c064216761a1e72a8b30f0d954d08cb6e4435a82091fb865afd20c8497285
+Verified against https://curl.se/ca/cacert.pem.sha256.
+Unmodified PEM bundle; MPL 2.0, see cacert-LICENSE.txt.

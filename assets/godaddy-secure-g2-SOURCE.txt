@@ -1,0 +1,22 @@
+Go Daddy Secure Certificate Authority - G2, public issuing CA certificate.
+Downloaded unchanged from https://certs.godaddy.com/repository/gdig2.crt.pem
+Publisher fingerprint: https://certs.godaddy.com/repository/
+Retrieved: 2026-11-15
+PEM SHA-256: 708c1477f5e2b2ae402ba1020a696cdd0051d44859a7e1423c900826d09053f4
+DER SHA-256: 973a41276ffd01e027a2aad49e34c37846d3e976ff6a620b6712e33832041aa6
+Expires: 2031-05-03 07:00:00 UTC. Review/replace before expiry.
+
+Certificate reproduction/distribution permission: CP/CPS section 9.5.1,
+subject to the Relying Party Agreement available in the publisher repository.
+https://github.com/godaddy/cp-cps/blob/main/cpcps/TLS_CPCPS.md
+This public certificate is separate from the MPL-licensed Mozilla conversion.
+
+Compatibility trust anchor for older PS4 firmware's cross-signed chain handling.
+Its signature verifies against the G2 root already present in cacert.pem.
+Trusting this issuer directly skips ancestor checks above it; it is not limited
+to one hostname. Leaf signature, hostname and date checks remain enabled.
+No peer-delivered certificate is added to trust at runtime.
+
+API/compatibility research (no implementation code copied):
+https://github.com/Xyhlo/SSPI/blob/dc6cb98ee0b1c68d67bfee581fcbcb241246f456/app/NativeHttp.cs
+https://github.com/e1z0/PS4-Games-Installer/blob/main/DEVELOPMENT.md

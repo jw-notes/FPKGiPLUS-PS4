@@ -1,0 +1,104 @@
+{
+  "LIBR00001": {
+    "developer": "jw-notes (repository maintainer)",
+    "description": "Read offline Wikipedia and Kiwix collections, ebooks, comics and documents, and listen to audiobooks on your PS4.",
+    "metadata_source": "https://github.com/jw-notes/Librarian",
+    "homebrew_category": "Media"
+  },
+  "JFPS40000": {
+    "developer": "jw-notes (repository maintainer)",
+    "description": "Browse and play movies, TV shows and other media from your own Jellyfin server on your PS4.",
+    "metadata_source": "https://github.com/jw-notes/JellyFin-PS4",
+    "homebrew_category": "Media"
+  },
+  "APOL00004": {
+    "developer": "bucanero (repository maintainer)",
+    "description": "Manage PS4 game saves: download saves, export backups, apply patches and resign saves for your account.",
+    "metadata_source": "https://github.com/bucanero/apollo-ps4",
+    "homebrew_category": "Utilities"
+  },
+  "CHTM00777": {
+    "developer": "bucanero (repository maintainer)",
+    "description": "Download and manage cheat files and game patches for GoldHEN on PS4.",
+    "metadata_source": "https://github.com/bucanero/PS4CheatsManager",
+    "homebrew_category": "Utilities"
+  },
+  "RMTC00001": {
+    "developer": "cy33hc (repository maintainer)",
+    "description": "Browse and transfer files between your PS4 and remote servers, network shares and cloud storage.",
+    "metadata_source": "https://github.com/cy33hc/ps4-ezremote-client",
+    "homebrew_category": "Utilities"
+  },
+  "BREW04327": {
+    "developer": "ps4-homebrew-dev (repository maintainer)",
+    "description": "Play music and videos from local drives and network media servers, with plugins for internet radio, podcasts and other online media.",
+    "metadata_source": "https://github.com/ps4-homebrew-dev/jtplay",
+    "homebrew_category": "Media"
+  },
+  "BREW04328": {
+    "developer": "ps4-homebrew-dev (repository maintainer)",
+    "description": "Watch TV from your Tvheadend server on your console. Requires a configured Tvheadend server on your network.",
+    "metadata_source": "https://github.com/ps4-homebrew-dev/tvhp",
+    "homebrew_category": "Media"
+  },
+  "NPXS39041": {
+    "developer": "LightningMods; MZ (lead developer)",
+    "description": "Browse, download and update homebrew applications on a jailbroken PS4.",
+    "metadata_source": "https://github.com/LightningMods/PS4-Store",
+    "homebrew_category": "Utilities"
+  },
+  "DVLX00001": {
+    "developer": "diasurgical (repository maintainer)",
+    "description": "Play Diablo and its Hellfire expansion using a modern recreation of the game engine. Requires your own original game data.",
+    "metadata_source": "https://github.com/diasurgical/DevilutionX",
+    "homebrew_category": "Games"
+  },
+  "FALL20002": {
+    "developer": "jaca772 (repository maintainer)",
+    "description": "Play Fallout 2 on PS4 with gamepad controls using the Community Edition engine. Requires your own Fallout 2 game data.",
+    "metadata_source": "https://github.com/jaca772/fallout2-ce-ps4",
+    "homebrew_category": "Games"
+  },
+  "SAIR00001": {
+    "developer": "orbis-ports (repository maintainer)",
+    "description": "Play Sonic 3 & Knuckles with widescreen support and enhancements from Angel Island Revisited. Requires compatible original game data.",
+    "metadata_source": "https://github.com/orbis-ports/sonic3air",
+    "homebrew_category": "Games"
+  },
+  "DLPH00010": {
+    "developer": "iHaiDeeZ (repository maintainer)",
+    "description": "Run GameCube and Wii games on PS4 using the Dolphin emulator, with per-game settings. Compatibility and performance vary by game.",
+    "metadata_source": "https://github.com/iHaiDeeZ/DolphinPS4",
+    "homebrew_category": "Emulators"
+  },
+  "RTRV00001": {
+    "developer": "orbis-ports (repository maintainer)",
+    "description": "Run classic games through supported libretro emulator cores in one interface. Requires your own game files and any BIOS files needed by the chosen core.",
+    "metadata_source": "https://github.com/orbis-ports/RetroArch",
+    "homebrew_category": "Emulators"
+  },
+  "PCSX20007": {
+    "developer": "PCSX2 team; PS4 port: Phoenixx1202",
+    "description": "An experimental PlayStation 2 emulator for PS4, based on PCSX2. Compatibility and performance vary by game.",
+    "metadata_source": "https://github.com/Phoenixx1202/PS4SX2",
+    "homebrew_category": "Emulators"
+  },
+  "DCLD00001": {
+    "developer": "odiecay (repository maintainer)",
+    "description": "Play Dark Cloud natively on PS4 through the Chronicle engine recreation. Requires your own Dark Cloud disc image.",
+    "metadata_source": "https://github.com/odiecay/chronicle-ps4",
+    "homebrew_category": "Games"
+  },
+  "TMPS10021": {
+    "developer": "orbis-ports (repository maintainer)",
+    "description": "Play Gothic II: Night of the Raven using the OpenGothic engine recreation. Requires your own original game data.",
+    "metadata_source": "https://github.com/orbis-ports/OpenGothic",
+    "homebrew_category": "Games"
+  },
+  "QUAK03000": {
+    "developer": "Mayo1970 (repository maintainer)",
+    "description": "Play Quake III Arena on PS4 using the ioQuake3 engine. Requires your own Quake III game data.",
+    "metadata_source": "https://github.com/Mayo1970/ioQuake3-PS4",
+    "homebrew_category": "Games"
+  }
+}

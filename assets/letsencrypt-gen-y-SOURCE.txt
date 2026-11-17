@@ -1,0 +1,32 @@
+Let's Encrypt / ISRG "Generation Y" public CA certificates (8 records).
+Downloaded unchanged from https://letsencrypt.org/certificates/
+(https://letsencrypt.org/certs/gen-y/<name>.pem), concatenated in this order:
+  int-yr1, int-yr2, int-yr3, int-ye1, int-ye2, int-ye3, root-yr, root-ye
+Retrieved: 2026-11-17
+PEM SHA-256 (whole file): 4d1ea37c7926b3a1418568319b59d692804181a78a7adf78a63dee9128b99669
+DER SHA-256 per certificate:
+  YR1      13949634d99cd6fd6aa80bc034fefacceb1969feef986586713ecdbb05758d3f
+  YR2      238b85a0099c65b970477d5724f1a1d475ce5058cffe4efa8733899bdb863c47
+  YR3      35500cb63b8d9769528d65d87220f51c069807a595acbf2fb6eca38fbe0a4bd2
+  YE1      a2372d06431e9716365eeed47ec020351497d182fcc038e457e58168a03cac07
+  YE2      97658de8c68dfa98ace1e5028a63d54a1aae911b3e21471076c6850cd08cbab4
+  YE3      82bcfc482cc19f71e6f98f4a027616ebda6d47096d408b336160d1c0ef8b995a
+  Root YR  e57b7e6f150c419102e8d5c055729ff967b9d1a829bf00cec89ca604ebf4a86f
+  Root YE  e14ffcad5b0025731006caa43a121a22d8e9700f4fb9cf852f02a708aa5d5666
+Expires: intermediates 2028-09-02, roots 2045-09-02 (UTC). Review/replace the
+intermediates before 2028-09-02, and drop this file once Mozilla's bundle
+(cacert.pem) ships ISRG Root YR / Root YE.
+
+Why: GitHub's release download host (release-assets.githubusercontent.com)
+serves a leaf issued by YR1, whose chain is YR1 -> Root YR (cross-signed by
+ISRG Root X1) -> ISRG Root X1. Root YR is not yet in Mozilla's bundle, and the
+PS4 firmware's TLS library does not complete that cross-signed path, so every
+homebrew update check failed with 0x8095f00c (verify flags 0x20).
+
+Every certificate here verifies against ISRG Root X1 already in cacert.pem
+(intermediates through the publisher's root-yr-by-x1 / root-x2-by-x1 /
+root-ye-by-x2 cross-certificates), and each self-signed root has the same key
+as its X1/X2 cross-signed form. Trusting these directly skips ancestor checks
+above them; it is not limited to one hostname. Leaf signature, hostname and
+date checks remain enabled. No peer-delivered certificate is added to trust
+at runtime.

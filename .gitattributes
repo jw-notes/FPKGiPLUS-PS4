@@ -1,0 +1,10 @@
+# LF everywhere, also in Windows checkouts: tools/build.sh runs in WSL, and
+# tools/check_tls_assets.py pins the certificate files' exact bytes.
+* text=auto eol=lf
+
+# Stored byte for byte.
+*.pem -text
+*.png binary
+*.jpg binary
+*.ttf binary
+*.otf binary

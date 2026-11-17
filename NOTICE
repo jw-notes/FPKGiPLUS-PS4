@@ -1,0 +1,46 @@
+FPKGi+
+Copyright (C) 2026 jw-notes <https://github.com/jw-notes>
+
+FPKGi+ is free software: you can redistribute it and/or modify it under the
+terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version (see LICENSE).
+
+Additional terms (GPLv3 section 7):
+  (b) Keep these notices and the credit "Based on FPKGi+ by jw-notes -
+      https://github.com/jw-notes" in modified versions.
+  (c) Do not misrepresent the origin of this program.
+
+FPKGi+ is standalone. It is inspired by PKGi by bucanero
+(https://github.com/bucanero/pkgi-ps3) and supports FPKGi's content-list
+format. It can copy existing local lists once, then maintains its own settings
+and data. It contains no PKGi or FPKGi code.
+
+Third-party components in the package
+-------------------------------------
+Mozilla CA certificate bundle, distributed by curl (https://curl.se/docs/caextract.html),
+MPL 2.0. Unmodified bundle: assets/cacert.pem; licence: licenses/cacert-LICENSE.txt.
+GoDaddy G2 public issuing certificate, reproduced unchanged with permission
+under CP/CPS section 9.5.1, subject to its Relying Party Agreement.
+Provenance, fingerprints and compatibility trust scope:
+licenses/godaddy-secure-g2-SOURCE.txt (assets/godaddy-secure-g2.pem).
+Let's Encrypt (ISRG) Generation Y public root and intermediate certificates,
+reproduced unchanged from https://letsencrypt.org/certificates/.
+Provenance, fingerprints and compatibility trust scope:
+licenses/letsencrypt-gen-y-SOURCE.txt (assets/letsencrypt-gen-y.pem).
+Itemzflow libjbc credential helper (LM, Sleirsgoevy, Specter), from
+https://github.com/LightningMods/Itemzflow, GPL-3.0. Adaptations: unsupported
+kernel-call detection, complete variadic arguments, bounded process walks,
+and current-compiler compatibility. Source and licence are included under
+licenses/itemzflow-jbc-source in the package and third_party/itemzflow_jbc
+in this source tree.
+Based on Librarian by jw-notes (https://github.com/jw-notes/Librarian),
+GPL-3.0-or-later with attribution terms, including its USB destination
+selection and mounted-drive discovery.
+stb_image, stb_image_write, stb_truetype (Sean Barrett)   public domain / MIT
+libwebp (Google)                                          BSD-3-Clause (licenses/libwebp-COPYING.txt)
+miniz (Rich Geldreich, Tenacious Software)                MIT (licenses/miniz-LICENSE.txt)
+GoldHEN Plugins SDK (GoldHEN team)                        licenses/goldhen_sdk-LICENSE.txt
+Noto Sans, Noto Serif, Noto Sans Mono, Noto Sans JP        SIL Open Font License 1.1 (assets/fonts/OFL.txt)
+Press Start 2P (The Press Start 2P Project Authors)        SIL Open Font License 1.1 (assets/fonts/OFL-PressStart2P.txt)
+OpenOrbis PS4 toolchain runtime (libc.prx, right.sprx)    GPL-3.0 (OpenOrbis)

@@ -1,0 +1,174 @@
+{
+  "DATA": {
+    "https://github.com/jw-notes/Librarian/releases/latest/download/IV0000-LIBR00001_00-LIBRARIANPS40000.pkg": {
+      "title_id": "LIBR00001",
+      "region": "ALL",
+      "name": "Librarian",
+      "version": "01.00",
+      "release": "11-15-2026",
+      "size": 26542080,
+      "min_fw": "9.00",
+      "cover_url": "/user/appmeta/LIBR00001/icon0.png"
+    },
+    "https://github.com/jw-notes/JellyFin-PS4/releases/latest/download/IV0000-JFPS40000_00-JELLYFINPS400000.pkg": {
+      "title_id": "JFPS40000",
+      "region": "ALL",
+      "name": "Jellyfin for PS4",
+      "version": "1.16",
+      "release": "11-15-2026",
+      "size": 38862848,
+      "min_fw": "9.00",
+      "cover_url": "/user/appmeta/JFPS40000/icon0.png"
+    },
+    "https://github.com/bucanero/apollo-ps4/releases/latest/download/IV0000-APOL00004_00-APOLLO0000000PS4.pkg": {
+      "title_id": "APOL00004",
+      "region": "ALL",
+      "name": "Apollo Save Tool",
+      "version": "2.4.0",
+      "release": "11-15-2026",
+      "size": 22806528,
+      "min_fw": "5.05",
+      "cover_url": "/user/appmeta/APOL00004/icon0.png"
+    },
+    "https://github.com/bucanero/PS4CheatsManager/releases/latest/download/IV0000-CHTM00777_00-PS4CHEATSMANAGER.pkg": {
+      "title_id": "CHTM00777",
+      "region": "ALL",
+      "name": "PS4 Cheats Manager",
+      "version": "1.2.2",
+      "release": "11-15-2026",
+      "size": 19202048,
+      "min_fw": "5.05",
+      "cover_url": "/user/appmeta/CHTM00777/icon0.png"
+    },
+    "https://github.com/cy33hc/ps4-ezremote-client/releases/download/2.11/ezremote_client.pkg": {
+      "title_id": "RMTC00001",
+      "region": "ALL",
+      "name": "ezRemote Client",
+      "version": "2.11",
+      "release": "11-14-2026",
+      "size": 54722560,
+      "min_fw": null,
+      "cover_url": null
+    },
+    "https://github.com/ps4-homebrew-dev/jtplay/releases/download/v0.8/IV0000-BREW04327_00-JTPLAY0000000000.pkg": {
+      "title_id": "BREW04327",
+      "region": "ALL",
+      "name": "jtplay",
+      "version": "0.8",
+      "release": "11-14-2026",
+      "size": 107020288,
+      "min_fw": null,
+      "cover_url": null
+    },
+    "https://github.com/ps4-homebrew-dev/tvhp/releases/download/v0.7/IV0000-BREW04328_00-TVHP000000000000.pkg": {
+      "title_id": "BREW04328",
+      "region": "ALL",
+      "name": "tvhp",
+      "version": "0.7",
+      "release": "11-14-2026",
+      "size": 104660992,
+      "min_fw": null,
+      "cover_url": null
+    },
+    "https://github.com/LightningMods/PS4-Store/releases/download/4.5/Store-R2.pkg": {
+      "title_id": "NPXS39041",
+      "region": "ALL",
+      "name": "PS4 Homebrew Store",
+      "version": "4.5",
+      "release": "05-19-2023",
+      "size": 24772608,
+      "min_fw": null,
+      "cover_url": null
+    },
+    "https://github.com/diasurgical/DevilutionX/releases/download/1.5.5/devilutionx-ps4.pkg": {
+      "title_id": "DVLX00001",
+      "region": "ALL",
+      "name": "DevilutionX",
+      "version": "1.5.5",
+      "release": "10-30-2025",
+      "size": 14614528,
+      "min_fw": null,
+      "cover_url": null
+    },
+    "https://github.com/jaca772/fallout2-ce-ps4/releases/download/build-20/IV0001-FALL20002_00-FALL200020100000.pkg": {
+      "title_id": "FALL20002",
+      "region": "ALL",
+      "name": "Fallout 2 CE",
+      "version": "build-20",
+      "release": "10-15-2026",
+      "size": 8519680,
+      "min_fw": null,
+      "cover_url": null
+    },
+    "https://github.com/orbis-ports/sonic3air/releases/download/sonic3air-ps4-v26.08.15.0-r1/Sonic3AIR-PS4-v26.08.15.0-r1.pkg": {
+      "title_id": "SAIR00001",
+      "region": "ALL",
+      "name": "Sonic 3 A.I.R.",
+      "version": "26.08.15.0-r1",
+      "release": "09-15-2026",
+      "size": 62849024,
+      "min_fw": null,
+      "cover_url": null
+    },
+    "https://github.com/iHaiDeeZ/DolphinPS4/releases/download/v04.19/DolphinPS4-v04.19.pkg": {
+      "title_id": "DLPH00010",
+      "region": "ALL",
+      "name": "DolphinPS4",
+      "version": "04.19",
+      "release": "10-25-2026",
+      "size": 206831616,
+      "min_fw": null,
+      "cover_url": null
+    },
+    "https://github.com/orbis-ports/RetroArch/releases/download/retroarch-ps4-v0.1.8/RetroArchV-PS4-v0.1.8.pkg": {
+      "title_id": "RTRV00001",
+      "region": "ALL",
+      "name": "RetroArchV",
+      "version": "0.1.8",
+      "release": "09-15-2026",
+      "size": 63897600,
+      "min_fw": null,
+      "cover_url": null
+    },
+    "https://github.com/Phoenixx1202/PS4SX2/releases/download/01.00/IV0000-PCSX20007_00-PS4SX2EMU0000001.pkg": {
+      "title_id": "PCSX20007",
+      "region": "ALL",
+      "name": "PS4SX2 (alpha)",
+      "version": "01.00",
+      "release": "10-12-2026",
+      "size": 53149696,
+      "min_fw": null,
+      "cover_url": null
+    },
+    "https://github.com/odiecay/chronicle-ps4/releases/download/v0.1.1/Chronicle-PS4-v0.1.1.pkg": {
+      "title_id": "DCLD00001",
+      "region": "ALL",
+      "name": "Dark Cloud - Chronicle PS4",
+      "version": "0.1.1",
+      "release": "10-17-2026",
+      "size": 24051712,
+      "min_fw": null,
+      "cover_url": null
+    },
+    "https://github.com/orbis-ports/OpenGothic/releases/download/opengothic-ps4-v0.92-r1/OpenGothic-PS4-v0.92-r1.pkg": {
+      "title_id": "TMPS10021",
+      "region": "ALL",
+      "name": "OpenGothic",
+      "version": "0.92-r1",
+      "release": "09-15-2026",
+      "size": 51249152,
+      "min_fw": null,
+      "cover_url": null
+    },
+    "https://github.com/Mayo1970/ioQuake3-PS4/releases/download/1.8/IV0000-QUAK03000_00-IOQ3PS4PORT00000.pkg": {
+      "title_id": "QUAK03000",
+      "region": "ALL",
+      "name": "ioQuake3",
+      "version": "1.8",
+      "release": "09-20-2026",
+      "size": 13762560,
+      "min_fw": null,
+      "cover_url": null
+    }
+  }
+}
