@@ -131,6 +131,17 @@ bool init() {
     return true;
 }
 
+bool init_service() {
+    sceSysmoduleLoadModuleInternal(ORBIS_SYSMODULE_INTERNAL_SYSTEM_SERVICE);
+    sceSysmoduleLoadModuleInternal(ORBIS_SYSMODULE_INTERNAL_USER_SERVICE);
+    sceUserServiceInitialize(nullptr);
+    g_data_root = "/data/FPKGiPlus";
+    lib::make_dirs(g_data_root);
+    lib::log_open(g_data_root + "/service.log");
+    LOG("FPKGi+ background downloader starting");
+    return true;
+}
+
 namespace {
 
 // Scanout buffers and the drawing canvas for a w x h frame.

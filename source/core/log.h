@@ -30,6 +30,9 @@ bool log_previous_crash(const std::string& crash_path);
 // request and similar) are written only when it is on. LOG lines (startup,
 // problems, what the app decided) always are.
 void log_set_debug(bool on);
+// Each line is also synced to the disk (the background downloader: so the
+// last lines before a crash or power loss are kept). Costs a disk sync per line.
+void log_set_sync(bool on);
 bool log_debug();
 
 }  // namespace lib

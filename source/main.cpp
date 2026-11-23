@@ -17,6 +17,7 @@
 #include "store/covers.h"
 #include "store/downloads.h"
 #include "store/installer.h"
+#include "store/service.h"
 #include "store/updater.h"
 #include "ui/app.h"
 #include "ui/screens.h"
@@ -59,6 +60,10 @@ int main(int argc, char** argv) {
     // /user/app and the install service.
     platform::enable_usb_access();
     if (!store::installer_init()) LOG("installer: %s", store::installer_problem().c_str());
+    // The background downloader runs the queue when it can (store/service.h);
+    // decided before the queue is restored below.
+    store::catalog()->load_settings();
+    if (store::catalog()->config().background_downloads) store::service_start();
     lib::make_dirs(lib::join_path(platform::data_root(), "ContentJSONs"));
     lib::make_dirs(lib::join_path(platform::data_root(), "Downloads"));
     lib::archive_restore_session(lib::join_path(platform::data_root(), "archive-session.json"));

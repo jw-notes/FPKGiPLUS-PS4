@@ -22,6 +22,7 @@
 #include "net/archive.h"
 #include "platform/platform.h"
 #include "store/covers.h"
+#include "store/service.h"
 #include "store/downloads.h"
 #include "store/installer.h"
 #include "store/metadata.h"
@@ -1098,7 +1099,7 @@ private:
             if (startable)
                 out.push_back({"Launch", [item] {
                                    const auto start = [item] { app().toast(store::launch_title(item).message); };
-                                   if (store::downloads().active() > 0)
+                                   if (store::downloads().active() > 0 && !store::downloads().using_service())
                                        confirm("Launch " + item.name + "?",
                                                "The console closes FPKGi+ to run it. The queue is saved: the running "
                                                "download comes back paused, ready to resume, the next time FPKGi+ is opened.",
@@ -1893,6 +1894,28 @@ private:
                          false});
 
         rows_.push_back({"System", "", nullptr, nullptr, true});
+        // The background downloader (store/service.h).
+        rows_.push_back({"Background downloads", onoff(cfg.background_downloads), nullptr,
+            [cat](int) {
+                cat->config().background_downloads = !cat->config().background_downloads;
+                cat->save_config();
+                app().toast(cat->config().background_downloads
+                    ? "Downloads will run in the background from the next time FPKGi+ opens."
+                    : "Downloads will run in FPKGi+ from the next time it opens. Remove the background downloader below to stop it now.");
+            }, false});
+        rows_.push_back({"Background downloader", store::service_status(), [] {
+            open_menu("Background downloader", {
+                {"Restart", nullptr, [] { app().toast(store::service_restart()); }, nullptr},
+                {"Remove", nullptr, [] {
+                    confirm("Remove the background downloader?",
+                        "It is stopped and deleted from the system partition. A download it was running is paused "
+                        "and continues in FPKGi+.",
+                        "Remove", [] { app().toast(store::service_remove()); });
+                }, nullptr},
+            }, "Downloads go on after FPKGi+ is closed and while you play. In rest mode they pause, and continue by "
+               "themselves when the console wakes. It is installed in the console's "
+               "system partition, as Itemzflow installs its daemon.");
+        }, nullptr, false});
         rows_.push_back({"Debug logging", onoff(cfg.debug_log), nullptr,
                          [cat](int) {
                              cat->config().debug_log = !cat->config().debug_log;

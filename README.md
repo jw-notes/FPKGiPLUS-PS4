@@ -27,6 +27,7 @@ FPKGi+ is a standalone package browser, downloader and installer for jailbroken 
 - **Catalogue tabs:** Games, Updates, DLC, Apps, Homebrew, Emulators, Themes, Demos, PS1, PS2 and PSP. A tab only appears when its content list has entries. PS1, PS2 and PSP titles are shown in their own platform's case.
 - **Built-in Homebrew list:** 17 open-source apps, games and emulators (Apollo Save Tool, RetroArch, DolphinPS4, Librarian and more), ready to download and keep updated. Tabs show cover art, region, version, size and required firmware, and installed titles get a tick.
 - **Downloads:** resumable downloads with up to 8 connections each. Choose the console or a USB drive as the destination. The queue survives closing the app, and the free space is checked before each download starts.
+- **Background downloads:** downloads keep going after FPKGi+ is closed and while you play other games; in rest mode they pause and continue when the console wakes. A notification appears when a download finishes or fails, wherever you are on the console. See [Background downloads](#background-downloads).
 - **Install and manage:** optionally install automatically after downloading and delete the PKG once the install is verified. You can also launch installed titles, delete installed games or apps, and delete downloaded PKGs.
 - **Game details:** descriptions, developer, publisher, genres, players and release dates, looked up automatically from [Wikidata](https://www.wikidata.org/) and cached for offline use.
 - **Homebrew updates:** installed homebrew linked to a GitHub release can be checked against the latest release. An update is only offered when the published PKG has the same title ID and a newer version.
@@ -61,6 +62,17 @@ FPKGi+ checks this repository's [latest release](../../releases/latest) shortly 
 3. Install the update from **Debug Settings > Game > Package Installer**.
 
 FPKGi+ never installs its own update while it is running, and its Install buttons refuse an FPKGi+ package.
+
+## Background downloads
+
+From version 1.01, downloads run in a small background service, the **FPKGi+ background downloader** (title ID `FPKP00002`), instead of inside the app. FPKGi+ installs and starts it when it opens, the way Itemzflow installs its daemon: it is copied to the console's system partition at `/system/vsh/app/FPKP00002`, and replaced when an FPKGi+ update carries a newer one.
+
+- Downloads continue after FPKGi+ is closed and while a game or another app is running.
+- In rest mode the console suspends every app and background service, the background downloader included, so a download pauses there. It continues by itself when the console wakes; if the network is not back yet, it is tried again a few times.
+- A notification appears when a download finishes or fails. While the console is in rest mode, and for a minute after it wakes, notifications wait and are shown afterwards.
+- Finished downloads are installed by FPKGi+: straight away if it is open and **Install after downloading** is on, otherwise the next time it opens. They are already in `/data/pkg/`, so you can also install them from GoldHEN's Package Installer.
+- The background downloader needs FPKGi+ to leave its sandbox (GoldHEN). When that is not possible, or if it cannot be installed or started, FPKGi+ downloads inside the app as in version 1.00.
+- **Settings > System > Background downloads** turns it off (from the next time FPKGi+ opens), and **Background downloader > Remove** stops it and deletes it from the system partition.
 
 ## Adding content
 
@@ -144,6 +156,8 @@ You can also add or correct details without editing the list by creating `/data/
 | Populate via web | Use the web URLs instead of local files. |
 | Reload content lists | Reloads all lists. |
 | Theme | Modern or Retro arcade. |
+| Background downloads | Runs downloads in the background downloader, so they continue after FPKGi+ is closed (on by default). Takes effect the next time FPKGi+ opens. |
+| Background downloader | Shows whether it is running; **Restart** or **Remove** it. |
 | Debug logging | Writes more detail to the log file (off by default). |
 | Software update | Checks for a newer FPKGi+ and downloads it. See [Updating FPKGi+](#updating-fpkgi). |
 
@@ -158,10 +172,12 @@ Everything is kept in `/data/FPKGiPlus/`:
 | `metadata.json` | Your own title details (optional) |
 | `wikidata-metadata.json` | Cached game details |
 | `download-queue.json` | The saved download queue |
+| `service/` | The background downloader's progress and the app's requests to it |
+| `service.log`, `service.prev.log` | The background downloader's logs |
 | `fpkgi-plus.log`, `fpkgi-plus.prev.log` | Logs from this run and the previous one |
 | `crash.log` | Written if the app crashes |
 
-If you report a problem, please attach `fpkgi-plus.log` (and `crash.log` if there is one). Logs never contain passwords, cookies or email addresses.
+If you report a problem, please attach `fpkgi-plus.log` and `service.log` (and `crash.log` if there is one). Logs never contain passwords, cookies or email addresses.
 
 ## Building from source
 
@@ -174,6 +190,8 @@ tools/build.sh      # build, sign and package: dist/<release_directory>/*.pkg
 ```
 
 On Windows, `.\tools\build.ps1` runs the same build in WSL (add `-Distribution <name>` to pick a WSL distribution) and validates the PKG. The version and output folder are set in `version.json`.
+
+The console's **Update History** for FPKGi+ comes from `assets/changeinfo.xml` (add an entry for each new version; the build stops if the version being built has none). The OpenOrbis PkgTool cannot pack it, so run `.\tools\pkgtool\setup.ps1` once (needs git and the .NET SDK 6 or later): it builds a PkgTool from [LibOrbisPkg](https://github.com/maxton/LibOrbisPkg) (LGPL v3) with a small patch, `tools/pkgtool/changeinfo.patch`, into `tools/pkgtool/bin`, and the build uses it from then on.
 
 More detail on how downloads, installs, TLS and updates work is in [docs/DETAILS.md](docs/DETAILS.md).
 

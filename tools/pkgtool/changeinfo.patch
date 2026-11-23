@@ -1,0 +1,57 @@
+diff --git a/LibOrbisPkg.Core/LibOrbisPkg.Core.csproj b/LibOrbisPkg.Core/LibOrbisPkg.Core.csproj
+index 5f0fe49..ec4bf01 100644
+--- a/LibOrbisPkg.Core/LibOrbisPkg.Core.csproj
++++ b/LibOrbisPkg.Core/LibOrbisPkg.Core.csproj
+@@ -1,7 +1,7 @@
+-﻿<Project Sdk="Microsoft.NET.Sdk">
++<Project Sdk="Microsoft.NET.Sdk">
+ 
+   <PropertyGroup>
+-    <TargetFramework>netcoreapp3.0</TargetFramework>
++    <TargetFramework>net6.0</TargetFramework>
+     <RootNamespace>LibOrbisPkg</RootNamespace>
+     <LangVersion>7.3</LangVersion>
+     <Platforms>AnyCPU</Platforms>
+diff --git a/LibOrbisPkg/PKG/PkgBuilder.cs b/LibOrbisPkg/PKG/PkgBuilder.cs
+index e6bd02c..3f9dcc8 100644
+--- a/LibOrbisPkg/PKG/PkgBuilder.cs
++++ b/LibOrbisPkg/PKG/PkgBuilder.cs
+@@ -1,4 +1,4 @@
+-﻿using System;
++using System;
+ using System.Collections.Generic;
+ using System.IO;
+ using System.IO.MemoryMappedFiles;
+@@ -383,6 +383,17 @@ namespace LibOrbisPkg.PKG
+         var entry = new FileEntry(EntryNames.NameToId[name], file.Write, (uint)file.Size);
+         pkg.Entries.Add(entry);
+       }
++      // FPKGi+ patch: entries kept in a sce_sys subfolder, such as
++      // changeinfo/changeinfo.xml (the console's Update History).
++      foreach (var dir in project.RootDir.Dirs.Where(f => f.name == "sce_sys").First().Dirs.Where(d => d.name == "changeinfo"))
++      {
++        foreach (var file in dir.Files)
++        {
++          var name = dir.name + "/" + file.name;
++          if (!EntryNames.NameToId.ContainsKey(name)) continue;
++          pkg.Entries.Add(new FileEntry(EntryNames.NameToId[name], file.Write, (uint)file.Size));
++        }
++      }
+       pkg.Digests.FileData = new byte[pkg.Entries.Count * Pkg.HASH_SIZE];
+ 
+       // 1st pass: set names
+diff --git a/PkgTool.Core/PkgTool.Core.csproj b/PkgTool.Core/PkgTool.Core.csproj
+index 10e4e0b..3c0f06a 100644
+--- a/PkgTool.Core/PkgTool.Core.csproj
++++ b/PkgTool.Core/PkgTool.Core.csproj
+@@ -1,8 +1,8 @@
+-﻿<Project Sdk="Microsoft.NET.Sdk">
++<Project Sdk="Microsoft.NET.Sdk">
+ 
+   <PropertyGroup>
+     <OutputType>Exe</OutputType>
+-    <TargetFramework>netcoreapp3.0</TargetFramework>
++    <TargetFramework>net6.0</TargetFramework>
+     <StartupObject>PkgTool.Program</StartupObject>
+     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

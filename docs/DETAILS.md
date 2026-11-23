@@ -28,10 +28,26 @@ Queued, paused and running downloads are saved in order to `download-queue.json`
 
 - Each entry is checked (address, title, destination, expected file name). Unusable entries are dropped, and an unreadable file is set aside as `download-queue.json.bad`.
 - Queued downloads continue once the catalogue has loaded. Paused ones stay paused.
-- A download that was running when the app closed or crashed comes back **Paused**, labelled *Interrupted when FPKGi+ closed*. **Resume** continues it.
+- A download that was running when the app closed or crashed comes back **Paused**, labelled *Interrupted when FPKGi+ closed*. **Resume** continues it. (With the background downloader, below, it simply continues.)
 - A download whose USB drive is not connected is **Paused**, labelled *USB drive N is not connected*. Nothing is written to the empty mount point, and the download is never moved to the console or another drive.
 
 Failed and stopped downloads are not saved in the queue, but their partial files remain listed in Downloads and can be continued from there.
+
+### The background downloader
+
+From 1.01 the queue runs in a console background service, `FPKP00002` (`source/service/`), so downloads continue when FPKGi+ is closed. It is FPKGi+'s own download code without the interface. FPKGi+ copies it from its package to `/system/vsh/app/FPKP00002` (the system partition is made writable for the copy and then read-only again), with the `param.sfo` of the console's own background music service, which marks it as a background service. It is replaced whenever FPKGi+'s package carries a different build, and started with the console's launcher when FPKGi+ opens.
+
+The service stays in its sandbox: in it `/data` and the network work, and USB drives are reached through GoldHEN's FTP server. (A test build that took it out of the sandbox with the credential helper turned the console off when FPKGi+ was closed during a download.)
+
+The app and the service share `/data/FPKGiPlus/service/`:
+
+- `commands/`: the app's requests (download, pause, resume, stop, clear, delete), one file each, applied in order and then removed.
+- `state.json`: the service's list and progress, rewritten about once a second while downloading (every 5 seconds otherwise), with a heartbeat and the downloads that finished.
+- `handled`: the last finished download the app has dealt with, so each is installed or reported once.
+
+The service owns `download-queue.json`. A download cut off by a stop or a crash is queued again when it comes back, rather than paused. It sends a console notification when a download finishes or fails.
+
+Rest mode suspends the service a few seconds after the console goes to sleep, as it does every app and background service (`sceLncUtilBlockAppSuspend`, which defers an ordinary app suspend, does not prevent it), so downloads pause and continue when the console wakes. The service notices a wake as a jump in the clock between its checks, and notices rest mode as no user on screen. Notifications wait while there is no user on screen and for a minute after one is back, because the console's interface is still starting then. A download that fails on a connection error (the network drops as the console sleeps and wakes) is tried again up to 5 times, 30 seconds apart; a full disk, a missing file (404) or a file that is not a PKG is reported at once. Installing stays with the app: it installs a finished download when it is open, or the next time it opens. FPKGi+ asks the service to stop (and waits for it) before replacing or removing it.
 
 ### Destinations
 

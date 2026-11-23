@@ -21,6 +21,9 @@ __pycache__/
 
 # Toolchain (installed per machine; see README) and download caches
 tools/toolchain/
+# The patched PkgTool: built by tools/pkgtool/setup.ps1
+tools/pkgtool/src/
+tools/pkgtool/bin/
 third_party/_downloads/
 
 # Tests and their test-only tools (tests/tools/): kept in the development

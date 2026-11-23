@@ -41,6 +41,11 @@ std::atomic<bool> g_debug{false};
 }
 
 void log_set_debug(bool on) { g_debug = on; }
+
+namespace {
+std::atomic<bool> g_sync{false};
+}
+void log_set_sync(bool on) { g_sync = on; }
 bool log_debug() { return g_debug; }
 
 void log_line(const char* format, ...) {
@@ -55,6 +60,7 @@ void log_line(const char* format, ...) {
     if (g_log) {
         fprintf(g_log, "[%7llu.%03llu] %s\n", ms / 1000, ms % 1000, message);
         fflush(g_log);
+        if (g_sync) fsync(fileno(g_log));
     }
     snprintf(g_recent[g_recent_next], kRecentWidth, "[%7llu.%03llu] %.200s", ms / 1000, ms % 1000, message);
     g_recent_next = (g_recent_next + 1) % kRecentLines;

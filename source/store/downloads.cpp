@@ -12,9 +12,12 @@
 #include <condition_variable>
 #include <deque>
 #include <cstring>
+#include <map>
 #include <set>
 #include <mutex>
 #include <thread>
+#include <time.h>
+#include <unistd.h>
 
 #include "core/fs.h"
 #include "core/log.h"
@@ -221,6 +224,126 @@ void changed() {
     save_queue();
 }
 
+// ---- the background downloader (see downloads.h) -------------------------------
+
+// App side: the service runs the queue and g_jobs mirrors its state.json.
+bool g_service = false;
+bool g_resume_interrupted = false;  // service side: see resume_interrupted()
+uint64_t g_command_seq = 0;
+uint64_t g_polled_ms = 0;
+int64_t g_service_beat = -1;  // wall-clock seconds of the state last read
+uint64_t g_handled = 0;       // the last finished download handled here
+bool g_handled_loaded = false;
+std::string g_state_text;
+// Install progress is the app's (it installs): kept per file across polls.
+std::map<std::string, std::pair<DownloadInstallState, std::string>> g_install_overlay;
+
+// Service side: finished downloads, numbered for the app.
+struct Finished { uint64_t seq; std::string path; };
+std::deque<Finished> g_events;
+uint64_t g_event_seq = 0;
+uint64_t g_state_written_ms = 0, g_state_revision = 0;
+
+std::string service_file(const char* name) { return lib::join_path(Downloads::service_dir(), name); }
+
+void send_command(lib::Json command) {
+    const std::string dir = service_file("commands");
+    lib::make_dirs(dir);
+    char name[64];
+    snprintf(name, sizeof name, "%010lld-%08llu.json", (long long)time(nullptr), (unsigned long long)++g_command_seq);
+    if (!lib::write_file_atomic(lib::join_path(dir, name), command.dump()))
+        LOG("downloads: could not send %s to the background downloader", command["op"].str().c_str());
+}
+
+lib::Json url_command(const char* op, const std::string& url) {
+    lib::Json c = lib::Json::object();
+    c.set("op", op);
+    c.set("url", url);
+    return c;
+}
+
+lib::Json job_json(const Job& job) {
+    lib::Json j = lib::Json::object();
+    j.set("id", (int64_t)job.id);
+    j.set("state", (int)job.state);
+    j.set("path", job.path);
+    j.set("done", (int64_t)job.done);
+    j.set("total", (int64_t)job.total);
+    j.set("speed", job.speed);
+    j.set("message", job.message);
+    j.set("item", item_json(job.item));
+    return j;
+}
+
+bool job_from_json(const lib::Json& j, Job& job) {
+    if (!j.is_object() || item_from_json(j["item"], job.item)) return false;
+    const int64_t state = j["state"].integer(-1);
+    if (state < 0 || state > (int)JobState::Cancelled) return false;
+    job.id = (uint64_t)j["id"].integer(0);
+    job.state = (JobState)state;
+    job.path = j["path"].str();
+    job.done = (uint64_t)std::max<int64_t>(0, j["done"].integer(0));
+    job.total = (uint64_t)std::max<int64_t>(0, j["total"].integer(0));
+    job.speed = j["speed"].num(0);
+    job.message = j["message"].str();
+    return job.id != 0;
+}
+
+// App side: reads state.json (at most twice a second). Finished downloads not
+// handled yet go to g_finished for tick() to install and report.
+void poll_service() {
+    const uint64_t now = platform::now_ms();
+    if (now - g_polled_ms < 500) return;
+    g_polled_ms = now;
+    if (!g_handled_loaded) {
+        g_handled_loaded = true;
+        std::string text;
+        if (lib::read_file(service_file("handled"), text, 64)) g_handled = strtoull(text.c_str(), nullptr, 10);
+    }
+    std::string text;
+    if (!lib::read_file(service_file("state.json"), text, 8 << 20) || text == g_state_text) return;
+    g_state_text = text;
+    bool ok = false;
+    const lib::Json root = lib::Json::parse(text, &ok);
+    if (!ok || !root.is_object() || !root["jobs"].is_array()) return;
+    g_service_beat = root["beat"].integer(-1);
+    std::vector<Job> jobs;
+    for (const auto& entry : root["jobs"].items()) {
+        Job job;
+        if (!job_from_json(entry, job)) continue;
+        auto overlay = g_install_overlay.find(job.path);
+        if (overlay != g_install_overlay.end() && job.state == JobState::Done) {
+            job.install_state = overlay->second.first;
+            job.install_message = overlay->second.second;
+            job.installed = job.install_state == DownloadInstallState::Installed;
+        }
+        jobs.push_back(std::move(job));
+    }
+    uint64_t handled = g_handled;
+    std::lock_guard<std::mutex> l(g_lock);
+    const auto shape = [](const std::vector<Job>& list) {
+        std::string out;
+        for (const auto& j : list) out += std::to_string(j.id) + ":" + std::to_string((int)j.state) + ":" + j.message + "|";
+        return out;
+    };
+    if (shape(jobs) != shape(g_jobs)) ++g_revision;
+    g_jobs = std::move(jobs);
+    for (const auto& event : root["finished"].items()) {
+        const uint64_t seq = (uint64_t)event["seq"].integer(0);
+        if (seq <= g_handled) continue;
+        handled = std::max(handled, seq);
+        for (const auto& j : g_jobs)
+            if (j.path == event["path"].str() && j.state == JobState::Done) g_finished.push_back(j.id);
+    }
+    if (handled != g_handled) {
+        g_handled = handled;
+        lib::write_file_atomic(service_file("handled"), std::to_string(handled));
+    }
+    platform::request_redraw();
+}
+
+bool add_with_path(const Item& item, const std::string& path);
+
 void run_one(uint64_t id) {
     Item item;
     std::string path;
@@ -318,8 +441,8 @@ void run_one(uint64_t id) {
     } else if (g_stopping) {
         // The app is closing: the same state a restart gives a download that
         // was cut off, so what is shown and what is saved agree.
-        j.state = JobState::Paused;
-        j.message = kInterrupted;
+        j.state = g_resume_interrupted ? JobState::Queued : JobState::Paused;
+        j.message = g_resume_interrupted ? "" : kInterrupted;
     } else if (g_pause_current) {
         j.state = JobState::Paused;
         j.message = "Paused.";
@@ -369,6 +492,39 @@ void worker() {
         }
         if (next) run_one(next);
     }
+}
+
+// Service side: the app's "add", at the destination the app chose.
+bool add_with_path(const Item& item, const std::string& path) {
+    if (!valid_destination(path, item)) {
+        LOG("downloads: refused an add for %s: %s is not a download folder", item.title_id.c_str(), path.c_str());
+        return false;
+    }
+    {
+        std::lock_guard<std::mutex> l(g_lock);
+        if (Job* existing = find_live(item.url)) {
+            if (existing->state != JobState::Paused) return false;
+            existing->state = JobState::Queued;
+            existing->message.clear();
+        } else {
+            if (installation_uses_file(path)) return false;
+            show_file(path);
+            Job j;
+            j.id = g_next_id++;
+            j.item = item;
+            j.path = path;
+            j.total = item.size;
+            j.done = lib::http_partial_bytes(path);
+            if (j.total && j.done > j.total) j.done = j.total;
+            g_jobs.erase(std::remove_if(g_jobs.begin(), g_jobs.end(), [&](const Job& old) {
+                return old.item.url == item.url && !live_state(old.state);
+            }), g_jobs.end());
+            g_jobs.push_back(std::move(j));
+        }
+        changed();
+    }
+    g_wake.notify_all();
+    return true;
 }
 
 }  // namespace
@@ -433,7 +589,7 @@ Downloads& downloads() {
 
 void Downloads::start() {
     std::lock_guard<std::mutex> l(g_lock);
-    if (g_running) return;
+    if (g_running || g_service) return;
     g_running = true;
     g_stopping = false;
     g_thread = std::thread(worker);
@@ -451,6 +607,7 @@ void Downloads::stop() {
 }
 
 void Downloads::restore() {
+    if (g_service) return;  // the service restores the queue it owns
     {
         std::lock_guard<std::mutex> l(g_lock);
         g_queue_file = lib::join_path(platform::data_root(), "download-queue.json");
@@ -500,7 +657,7 @@ void Downloads::restore() {
                         job.done = job.total = lib::file_size(job.path);
                         job.message = "Downloaded to " + job.path;
                         g_finished.push_back(job.id);
-                    } else if (state == "active") {
+                    } else if (state == "active" && !g_resume_interrupted) {
                         // Cut off mid-transfer. The partial file and its
                         // notes are as they were left; it waits to be resumed.
                         job.state = JobState::Paused;
@@ -551,15 +708,38 @@ bool Downloads::add(const Item& item) {
             }
             existing->state = JobState::Queued;
             existing->message.clear();
+            if (g_service) {
+                send_command(url_command("resume", item.url));
+                ++g_revision;
+                return true;
+            }
         } else {
             auto& config = catalog()->config();
             if (!resolve_download_destination(config, config.download_to_usb ? connected_usb_drives() : std::vector<std::string>{}))
                 return false;
+            const std::string path = package_path(item);
+            if (installation_uses_file(path)) return false;
+            if (g_service) {
+                // The service adds it; shown as queued until its state says more.
+                show_file(path);
+                lib::Json c = lib::Json::object();
+                c.set("op", "add");
+                c.set("path", path);
+                c.set("item", item_json(item));
+                send_command(c);
+                Job j;
+                j.id = g_next_id++;
+                j.item = item;
+                j.path = path;
+                j.total = item.size;
+                g_jobs.push_back(std::move(j));
+                ++g_revision;
+                return true;
+            }
             Job j;
             j.id = g_next_id++;
             j.item = item;
-            j.path = package_path(item);
-            if (installation_uses_file(j.path)) return false;
+            j.path = path;
             show_file(j.path);
             j.total = item.size;
             j.done = lib::http_partial_bytes(j.path);
@@ -578,6 +758,11 @@ bool Downloads::add(const Item& item) {
 
 void Downloads::pause(const std::string& url) {
     std::lock_guard<std::mutex> l(g_lock);
+    if (g_service) {
+        send_command(url_command("pause", url));
+        if (Job* j = find(url)) { j->message = "Pausing..."; ++g_revision; }
+        return;
+    }
     if (g_current_url == url) {
         g_pause_current = true;
         return;
@@ -613,6 +798,13 @@ bool Downloads::resume(const std::string& url, std::string* problem) {
                 changed();
                 return false;
             }
+            if (g_service) {
+                send_command(url_command("resume", url));
+                j->state = JobState::Queued;
+                j->message.clear();
+                ++g_revision;
+                return true;
+            }
             j->state = JobState::Queued;
             j->message.clear();
             changed();
@@ -624,6 +816,11 @@ bool Downloads::resume(const std::string& url, std::string* problem) {
 
 void Downloads::cancel(const std::string& url) {
     std::lock_guard<std::mutex> l(g_lock);
+    if (g_service) {
+        send_command(url_command("cancel", url));
+        if (Job* j = find_live(url)) { j->message = "Stopping..."; ++g_revision; }
+        return;
+    }
     if (g_current_url == url) {
         g_cancel_current = true;
         return;
@@ -653,6 +850,13 @@ void Downloads::clear_finished(const std::vector<std::string>& files) {
     lib::write_file_atomic(g_cleared_file, g_cleared.dump());
     g_jobs.erase(std::remove_if(g_jobs.begin(), g_jobs.end(), [](const Job& j) { return !live_state(j.state); }),
                  g_jobs.end());
+    if (g_service) {
+        lib::Json c = lib::Json::object();
+        c.set("op", "clear");
+        send_command(c);
+        ++g_revision;
+        return;
+    }
     changed();
 }
 
@@ -660,6 +864,7 @@ uint64_t Downloads::revision() const { return g_revision.load(); }
 
 void Downloads::set_install_status(const std::string& path, DownloadInstallState state, const std::string& message) {
     std::lock_guard<std::mutex> lock(g_lock);
+    if (g_service) g_install_overlay[path] = {state, message};
     for (auto& job : g_jobs) if (job.path == path && job.state == JobState::Done) {
         job.install_state = state;
         job.install_message = message;
@@ -681,6 +886,17 @@ bool Downloads::delete_files(const std::string& selected, std::string& problem) 
         return false;
     }
     if (installation_uses_file(path)) { problem = "The installer is still using this PKG. Wait for installation to finish."; return false; }
+    if (g_service) {
+        // The service deletes the files, so its own list forgets them too.
+        lib::Json c = lib::Json::object();
+        c.set("op", "delete");
+        c.set("path", path);
+        send_command(c);
+        g_jobs.erase(std::remove_if(g_jobs.begin(), g_jobs.end(), [&](const Job& job) { return job.path == path; }), g_jobs.end());
+        ++g_revision;
+        problem.clear();
+        return true;
+    }
     // Delete the resume notes (the sparse-file map and the remote file's
     // validators) along with the partial bytes. Keeping either behind can
     // cause a later attempt to resume stale data.
@@ -742,6 +958,7 @@ Downloads::FileState Downloads::file_state(const Item& item, const std::string& 
 std::vector<std::string> Downloads::tick() {
     std::vector<std::string> messages;
     std::vector<Job> finished;
+    if (g_service) poll_service();
     {
         std::lock_guard<std::mutex> l(g_lock);
         while (!g_finished.empty()) {
@@ -766,6 +983,117 @@ std::vector<std::string> Downloads::tick() {
             (r.ok ? r.message : "Automatic installation failed: " + r.message + " Downloaded PKG kept; retry Install."));
     }
     return messages;
+}
+
+// ---- the background downloader ------------------------------------------------------
+
+std::string Downloads::service_dir() { return lib::join_path(platform::data_root(), "service"); }
+
+void Downloads::use_service(bool on) {
+    std::lock_guard<std::mutex> l(g_lock);
+    if (g_service == on) return;
+    g_service = on;
+    g_state_text.clear();
+    g_polled_ms = 0;
+    // The list belongs to whoever runs the queue now: the service's mirror,
+    // or the saved queue restore() reads.
+    g_jobs.clear();
+    g_finished.clear();
+    ++g_revision;
+}
+
+bool Downloads::using_service() const { return g_service; }
+
+void Downloads::resume_interrupted(bool on) { g_resume_interrupted = on; }
+
+int64_t Downloads::service_silence() const {
+    if (g_service_beat < 0) return -1;
+    return (int64_t)time(nullptr) - g_service_beat;
+}
+
+void Downloads::service_apply_commands() {
+    const std::string dir = service_file("commands");
+    std::vector<lib::DirEntry> entries;
+    if (!lib::list_dir(dir, entries, false)) return;
+    std::vector<std::string> names;
+    for (const auto& e : entries)
+        if (!e.is_dir && lib::ends_with(e.name, ".json")) names.push_back(e.name);
+    std::sort(names.begin(), names.end());
+    for (const auto& name : names) {
+        const std::string file = lib::join_path(dir, name);
+        std::string text;
+        const bool read = lib::read_file(file, text, 1 << 20);
+        lib::remove_file(file);
+        bool ok = false;
+        const lib::Json c = read ? lib::Json::parse(text, &ok) : lib::Json();
+        if (!ok || !c.is_object()) { LOG("service: unreadable command %s dropped", name.c_str()); continue; }
+        const std::string op = c["op"].str(), url = c["url"].str();
+        LOG("service: command %s %s", op.c_str(), url.empty() ? c["path"].str().c_str() : url.c_str());
+        if (op == "add") {
+            Item item;
+            const char* why = item_from_json(c["item"], item);
+            if (why) LOG("service: add refused: %s", why);
+            else if (!add_with_path(item, c["path"].str())) LOG("service: add of %s not applied", item.title_id.c_str());
+        } else if (op == "pause") {
+            pause(url);
+        } else if (op == "resume") {
+            std::string problem;
+            if (!resume(url, &problem)) LOG("service: resume not applied: %s", problem.c_str());
+        } else if (op == "cancel") {
+            cancel(url);
+        } else if (op == "clear") {
+            std::lock_guard<std::mutex> l(g_lock);
+            g_jobs.erase(std::remove_if(g_jobs.begin(), g_jobs.end(), [](const Job& j) { return !live_state(j.state); }),
+                         g_jobs.end());
+            changed();
+        } else if (op == "delete") {
+            std::string problem;
+            if (!delete_files(c["path"].str(), problem)) LOG("service: delete not applied: %s", problem.c_str());
+        } else {
+            LOG("service: unknown command %s", op.c_str());
+        }
+    }
+}
+
+void Downloads::service_write_state(bool force) {
+    std::lock_guard<std::mutex> l(g_lock);
+    bool fresh = false;
+    while (!g_finished.empty()) {
+        if (Job* j = by_id(g_finished.front())) {
+            // Numbered by time, so numbers keep growing across restarts of the service.
+            g_event_seq = std::max(g_event_seq + 1, (uint64_t)time(nullptr) * 1000);
+            g_events.push_back({g_event_seq, j->path});
+            while (g_events.size() > 32) g_events.pop_front();
+            fresh = true;
+        }
+        g_finished.pop_front();
+    }
+    bool downloading = false;
+    for (const auto& j : g_jobs)
+        if (j.state == JobState::Downloading) downloading = true;
+    const uint64_t now = platform::now_ms(), since = now - g_state_written_ms;
+    const bool changed_list = g_revision.load() != g_state_revision;
+    if (!force && !fresh && !changed_list && since < (downloading ? 1000u : 5000u)) return;
+    lib::Json root = lib::Json::object();
+    root.set("version", 1);
+    root.set("beat", (int64_t)time(nullptr));
+    root.set("pid", (int64_t)getpid());
+    lib::Json jobs = lib::Json::array();
+    for (const auto& j : g_jobs) jobs.push(job_json(j));
+    root.set("jobs", jobs);
+    lib::Json finished = lib::Json::array();
+    for (const auto& e : g_events) {
+        lib::Json entry = lib::Json::object();
+        entry.set("seq", (int64_t)e.seq);
+        entry.set("path", e.path);
+        finished.push(entry);
+    }
+    root.set("finished", finished);
+    lib::make_dirs(Downloads::service_dir());
+    if (lib::write_file_atomic(service_file("state.json"), root.dump())) {
+        g_state_written_ms = now;
+        g_state_revision = g_revision.load();
+    }
 }
 
 }  // namespace store

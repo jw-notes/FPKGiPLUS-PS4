@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The console's Update History (Options on FPKGi+'s home-screen tile).
+     Newest version first. tools/package.py puts this in the package as
+     sce_sys/changeinfo/changeinfo.xml, keeping only the versions up to the
+     one being built (version.json), so a note can be written before its release. -->
+<changeinfo>
+  <changes app_ver="01.01">
+    <![CDATA[
+This version contains the following changes:
+- Background downloads: downloads keep going after FPKGi+ is closed and while you play other games. In rest mode they pause, and continue by themselves when the console wakes
+- A notification appears when a download finishes or fails, wherever you are on the console
+- Starting a game no longer pauses your downloads
+- New in Settings > System: Background downloads (on or off) and Background downloader (status, restart, remove)
+- FPKGi+ now appears under Library > Applications
+- Update History notes for FPKGi+, shown here
+    ]]>
+  </changes>
+  <changes app_ver="01.00">
+    <![CDATA[
+First release of FPKGi+, a package browser, downloader and installer for jailbroken PS4 consoles:
+- Browse FPKGi-format content lists with cover art, details and PS1 / PS2 / PSP / PS4 cases
+- Resumable downloads with up to 8 connections, to the console or a USB drive
+- Install, launch, update and delete titles from inside the app
+- Built-in list of open-source homebrew, with update checks against each project's latest release
+- Checks for FPKGi+ updates in Settings > System > Software update
+- Modern and Retro arcade themes
+    ]]>
+  </changes>
+</changeinfo>

@@ -315,6 +315,7 @@ void Catalog::load_config() {
     // FPKGi+'s own settings, under a key FPKGi leaves alone.
     const lib::Json& plus = config_json_["FPKGIPLUS"];
     config_.skip_game_update_checks = plus["skipGameUpdateChecks"].boolean(true);
+    config_.background_downloads = plus["backgroundDownloads"].boolean(true);
     config_.connections = (int)std::max<int64_t>(1, std::min<int64_t>(8, plus["connections"].integer(4)));
     config_.theme = plus["theme"].str() == "arcade" ? "arcade" : "modern";
     config_.homebrew_category = "All";
@@ -359,6 +360,7 @@ void Catalog::save_config() {
     plus.set("theme", config_.theme);
     plus.set("homebrewCategory", config_.homebrew_category);
     plus.set("skipGameUpdateChecks", config_.skip_game_update_checks);
+    plus.set("backgroundDownloads", config_.background_downloads);
     root.set("FPKGIPLUS", plus);
     config_json_ = root;
     const std::string path = lib::join_path(platform::data_root(), "config.json");

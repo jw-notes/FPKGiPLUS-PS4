@@ -8,6 +8,7 @@ the GP4 project, ready for PkgTool. Called by tools/build.sh.
 """
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -37,7 +38,7 @@ def write_sfo(version: str) -> None:
     sfo = PKG / "sce_sys/param.sfo"
     sfo.parent.mkdir(parents=True, exist_ok=True)
     run(TOOL, "sfo_new", sfo)
-    values = {"APP_TYPE": 1, "APP_VER": version, "ATTRIBUTE": 0, "CATEGORY": "gd", "CONTENT_ID": CONTENT_ID,
+    values = {"APP_TYPE": 1, "APP_VER": version, "ATTRIBUTE": 0, "CATEGORY": "gde", "CONTENT_ID": CONTENT_ID,
               "DOWNLOAD_DATA_SIZE": 0, "SYSTEM_VER": 0, "TITLE": TITLE, "TITLE_ID": TITLE_ID, "VERSION": version}
     sizes = {"APP_VER": 8, "CATEGORY": 4, "CONTENT_ID": 48, "TITLE": 128, "TITLE_ID": 12, "VERSION": 8}
     for key, value in values.items():
@@ -50,6 +51,9 @@ def copy_files() -> None:
     (PKG / "sce_sys/about").mkdir(parents=True, exist_ok=True)
     (PKG / "sce_module").mkdir(parents=True, exist_ok=True)
     shutil.copyfile(ROOT / "build/ps4/fpkgi-jbc.prx", PKG / "sce_module/fpkgi-jbc.prx")
+    # The background downloader (source/service), installed by the app.
+    (PKG / "service").mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(ROOT / "build/ps4/service.self", PKG / "service/service.self")
     (PKG / "assets/fonts").mkdir(parents=True, exist_ok=True)
     shutil.copyfile(ROOT / "assets/homebrew-metadata.json", PKG / "assets/homebrew-metadata.json")
     shutil.copyfile(ROOT / "assets/homebrew-list.json", PKG / "assets/homebrew-list.json")
@@ -94,6 +98,20 @@ def fix_gp4() -> None:
     tree.write(path, encoding="utf-8", xml_declaration=True)
 
 
+def write_changeinfo(version: str) -> None:
+    """The console's Update History, from assets/changeinfo.xml: the entries up
+    to `version` (newest first). The version being built must have one."""
+    text = (ROOT / "assets/changeinfo.xml").read_text(encoding="utf-8")
+    entries = re.findall(r'(<changes app_ver="(\d\d\.\d\d)">.*?</changes>)', text, re.S)
+    kept = [block for block, ver in entries if ver <= version]
+    if not any(ver == version for _, ver in entries):
+        sys.exit(f"assets/changeinfo.xml has no notes for {version}: add a <changes app_ver=\"{version}\"> entry")
+    out = PKG / "sce_sys/changeinfo/changeinfo.xml"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    body = '<?xml version="1.0" encoding="utf-8"?>\n<changeinfo>\n  ' + "\n  ".join(kept) + "\n</changeinfo>\n"
+    out.write_text(body, encoding="utf-8", newline="\n")
+
+
 def write_gp4() -> None:
     files = sorted(str(p.relative_to(PKG)).replace("\\", "/") for p in PKG.rglob("*")
                    if p.is_file() and p.name != "project.gp4")
@@ -108,5 +126,6 @@ if __name__ == "__main__":
         sys.exit("build/pkg/eboot.bin is missing: run the PS4 build first")
     write_sfo(version)
     copy_files()
+    write_changeinfo(version)
     write_gp4()
     print("package tree ready:", PKG)

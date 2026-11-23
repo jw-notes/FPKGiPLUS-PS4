@@ -120,6 +120,36 @@ public:
     // Called on the UI thread once per frame: installs finished downloads
     // (when "Install when downloaded" is on) and reports them.
     std::vector<std::string> tick();  // messages to show
+
+    // ---- the background downloader (FPKP00002, see store/service.h) -------------
+    // The queue can be run by a separate background process, so downloads go
+    // on after FPKGi+ is closed. The two talk through <data>/service/:
+    //   commands/<n>.json  the app's requests (add, pause, resume, cancel,
+    //                      clear, delete), each written whole, applied in order
+    //                      and removed by the service
+    //   state.json         the service's list and progress, rewritten about
+    //                      once a second, with a heartbeat and the downloads
+    //                      that finished (numbered, so each is handled once)
+    //   handled            the last finished download the app has handled
+    //
+    // App side. While on, this object mirrors state.json: the methods above
+    // send commands instead of running anything, restore()/start()/stop() do
+    // nothing, and tick() reads the state and hands finished downloads to the
+    // usual install step. Turn it on before restore().
+    void use_service(bool on);
+    bool using_service() const;
+    // Seconds since the service last wrote its state (-1: never). The app
+    // treats a long silence as a stopped service.
+    int64_t service_silence() const;
+    // Service side: applies the app's commands; writes state.json (when
+    // `force`, or when something changed, or every second while downloading).
+    void service_apply_commands();
+    // Service side: a download cut off by a stop or a crash is queued again
+    // (not paused) when the service comes back, so it simply carries on.
+    void resume_interrupted(bool on);
+    void service_write_state(bool force);
+    // The service directory, for both sides.
+    static std::string service_dir();
 #ifdef LIB_HOST
     // For tests: forgets the list as closing the app would, without saving.
     // Only while the worker is stopped.

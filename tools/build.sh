@@ -43,7 +43,14 @@ if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
   # The Windows PkgTool (needs the .NET runtime on Windows).
   export DOTNET_ROLL_FORWARD=LatestMajor
   export WSLENV="${WSLENV:+$WSLENV:}DOTNET_ROLL_FORWARD"
-  "$SDK/bin/windows/PkgTool.Core.exe" pkg_build project.gp4 "../../$RELEASE_DIR"
+  # The patched PkgTool (tools/pkgtool/setup.ps1) also packs
+  # sce_sys/changeinfo, the console's Update History.
+  if [[ -f ../../tools/pkgtool/bin/PkgTool.Core.exe ]]; then
+    ../../tools/pkgtool/bin/PkgTool.Core.exe pkg_build project.gp4 "../../$RELEASE_DIR"
+  else
+    echo "warning: tools/pkgtool/bin is missing (run tools\\pkgtool\\setup.ps1): the package has no Update History" >&2
+    "$SDK/bin/windows/PkgTool.Core.exe" pkg_build project.gp4 "../../$RELEASE_DIR"
+  fi
 else
   "$SDK/bin/linux/PkgTool.Core" pkg_build project.gp4 "../../$RELEASE_DIR"
 fi

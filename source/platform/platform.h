@@ -47,6 +47,9 @@ struct Pad {
 };
 
 bool init();
+// The background downloader's start: the data folder, its own log and the
+// user service, without video or a controller (console only).
+bool init_service();
 void shutdown();
 [[noreturn]] void exit_app();
 

@@ -38,7 +38,7 @@ INCLUDES := -I. -Isource -Ithird_party -Ithird_party/libwebp -Ithird_party/libwe
 HOST_OBJ := build/host/obj
 HOST_FLAGS := -DLIB_HOST -O2 -g -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers $(INCLUDES)
 HOST_APP_OBJS := $(patsubst %.cpp,$(HOST_OBJ)/%.o,$(APP_SOURCES) source/net/http_host.cpp \
-                   source/platform/platform_host.cpp source/store/installer_host.cpp)
+                   source/platform/platform_host.cpp source/store/installer_host.cpp source/store/service_host.cpp)
 HOST_LIB_OBJS := $(patsubst %.c,$(HOST_OBJ)/%.o,$(WEBP_SOURCES) $(MINIZ_SOURCES))
 
 $(HOST_OBJ)/%.o: %.cpp
@@ -83,7 +83,7 @@ PS4_TARGET := --target=x86_64-pc-freebsd12-elf -fPIC -funwind-tables -isysroot $
 PS4_FLAGS := $(PS4_TARGET) -O2 -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE -DLIB_VERSION=\"$(APP_VERSION)\" \
              -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers $(INCLUDES)
 PS4_APP_OBJS := $(patsubst %.cpp,$(PS4_OBJ)/%.o,$(APP_SOURCES) source/net/http_ps4.cpp \
-                  source/platform/platform_ps4.cpp source/store/installer_ps4.cpp $(ESCAPE_SOURCES) source/main.cpp)
+                  source/platform/platform_ps4.cpp source/store/installer_ps4.cpp source/store/service_ps4.cpp                   $(ESCAPE_SOURCES) source/main.cpp)
 PS4_LIB_OBJS := $(patsubst %.c,$(PS4_OBJ)/%.o,$(WEBP_SOURCES) $(MINIZ_SOURCES) $(ESCAPE_LIB_SOURCES))
 
 # The version is compiled into the app; changing it must rebuild the objects.
@@ -119,7 +119,16 @@ $(PS4_BUILD)/fpkgi-jbc.prx: $(PS4_OBJ)/itemzflow_jbc.o Makefile
 	$(LLD) -flavor gnu -m elf_x86_64 -pie -e module_start --script $(OO_SDK)/link.x --eh-frame-hdr -L$(OO_SDK)/lib $< -lc -lkernel $(OO_SDK)/lib/crtlib.o -o $(PS4_BUILD)/fpkgi-jbc.elf
 	OO_PS4_TOOLCHAIN=$(OO_SDK) $(OO_SDK)/bin/linux/create-fself -in=$(PS4_BUILD)/fpkgi-jbc.elf -out=$(PS4_BUILD)/fpkgi-jbc.oelf --lib=$@ --paid 0x3800000000000011
 
-ps4: $(PS4_BUILD)/FPKGiPlus.elf $(PS4_BUILD)/fpkgi-jbc.prx
+# The background downloader (source/service, store/service.h): the app's own
+# code without its main, shipped inside the package as service/service.self.
+PS4_SERVICE_OBJS := $(filter-out $(PS4_OBJ)/source/main.o,$(PS4_APP_OBJS)) $(PS4_OBJ)/source/service/main.o
+$(PS4_BUILD)/service.elf: $(PS4_SERVICE_OBJS) $(PS4_LIB_OBJS)
+	$(LLD) -flavor gnu -m elf_x86_64 -pie --wrap=clock_gettime --script $(OO_SDK)/link.x --eh-frame-hdr 	  -L$(OO_SDK)/lib $(OO_SDK)/lib/crt1.o $^ --start-group $(PS4_LIBS) --end-group -o $@
+
+$(PS4_BUILD)/service.self: $(PS4_BUILD)/service.elf
+	OO_PS4_TOOLCHAIN=$(OO_SDK) $(OO_SDK)/bin/linux/create-fself -in=$< -out=$(PS4_BUILD)/service.oelf --eboot $@ --paid 0x3800000000000011
+
+ps4: $(PS4_BUILD)/FPKGiPlus.elf $(PS4_BUILD)/fpkgi-jbc.prx $(PS4_BUILD)/service.self
 
 clean:
 	rm -rf build/host build/ps4

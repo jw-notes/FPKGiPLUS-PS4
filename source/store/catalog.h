@@ -67,6 +67,9 @@ struct Config {
     bool install_after = false;
     bool cleanup_after_install = false;
     bool skip_game_update_checks = true;
+    // Downloads run in the background downloader (store/service.h) when it
+    // can be used. FPKGIPLUS.backgroundDownloads; read when FPKGi+ starts.
+    bool background_downloads = true;
     bool populate_via_web = false;
     bool debug_log = false;  // Settings: write every network request to the log
     int connections = 4;         // connections used at once for one download (1 to 8)
@@ -94,6 +97,9 @@ public:
 
     Config& config() { return config_; }
     void save_config();
+    // Reads config.json only (the background downloader needs the settings,
+    // not the lists).
+    void load_settings() { load_config(); }
     void update_game_metadata(const std::string& title_id, const lib::Json& fields);
 
 private:
