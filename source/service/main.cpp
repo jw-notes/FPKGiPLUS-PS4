@@ -172,7 +172,10 @@ int main() {
     // when it cannot leave the sandbox.
     lib::usb_ftp::enable("127.0.0.1:2121", "/mnt/usb");
     const std::string data = platform::data_root();
-    lib::archive_restore_session(lib::join_path(data, "archive-session.json"));
+    const std::string session_path = lib::join_path(data, "archive-session.json");
+    std::string session_text;
+    lib::read_file(session_path, session_text, 64 * 1024);
+    lib::archive_restore_session(session_path);
     const std::string config_path = lib::join_path(data, "config.json");
     std::string config_text;
     lib::read_file(config_path, config_text, 1 << 20);
@@ -205,6 +208,14 @@ int main() {
                 config_text = text;
                 store::catalog()->load_settings();
                 LOG("service: settings reloaded");
+            }
+            // Archive.org sign-in or sign-out in the app, while this keeps running.
+            std::string session;
+            if (!lib::read_file(session_path, session, 64 * 1024)) session.clear();
+            if (session != session_text) {
+                session_text = session;
+                lib::archive_restore_session(session_path);
+                LOG("service: archive.org session %s", lib::archive_signed_in() ? "reloaded" : "cleared");
             }
         }
         queue.service_write_state(false);

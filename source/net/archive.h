@@ -9,7 +9,8 @@ namespace lib {
 std::string archive_sign_in(const std::string& email, const std::string& password);
 void archive_sign_out();
 // At startup: where the session is kept, and loads one saved earlier.
-// True when a saved session was restored.
+// True when a saved session was restored. Calling it again reloads the file
+// (the background downloader does when the app signs in or out).
 bool archive_restore_session(const std::string& path);
 bool archive_signed_in();
 std::string archive_cookie_for(const std::string& url);

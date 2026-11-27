@@ -35,6 +35,7 @@ void archive_sign_out() {
 bool archive_restore_session(const std::string& path) {
     std::lock_guard<std::mutex> lock(session_lock);
     session_path = path;
+    session_cookie.clear();  // reloading (the service): a removed file means signed out
     std::string text;
     if (path.empty() || !read_file(path, text, 64 * 1024)) return false;
     bool ok = false;

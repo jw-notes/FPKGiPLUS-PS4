@@ -4,6 +4,12 @@
      sce_sys/changeinfo/changeinfo.xml, keeping only the versions up to the
      one being built (version.json), so a note can be written before its release. -->
 <changeinfo>
+  <changes app_ver="01.02">
+    <![CDATA[
+This version contains the following changes:
+- Fixed Archive.org downloads failing with "requires sign-in (401)" after signing in while the background downloader was already running. Signing in or out now reaches the background downloader within a few seconds
+    ]]>
+  </changes>
   <changes app_ver="01.01">
     <![CDATA[
 This version contains the following changes:
