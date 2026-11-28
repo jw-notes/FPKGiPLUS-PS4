@@ -382,6 +382,7 @@ void run_one(uint64_t id) {
     lib::HttpRequest request;
     request.url = item.url;
     request.timeout_seconds = 60;
+    request.headers = request_headers(catalog()->config(), item.url);  // custom cookies/headers (config.json)
     uint64_t last_ms = platform::now_ms(), last_bytes = 0;
     double speed = 0;
     bool first = true;

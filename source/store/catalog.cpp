@@ -10,11 +10,13 @@
 #include <time.h>
 
 #include <algorithm>
+#include <map>
 
 #include "core/fs.h"
 #include "core/log.h"
 #include "core/text.h"
 #include "net/http.h"
+#include "net/url.h"
 #include "platform/platform.h"
 
 namespace store {
@@ -209,6 +211,24 @@ bool region_shown(const Config& config, const std::string& region) {
     return true;  // ALL and unknown regions are always shown, as in FPKGi
 }
 
+std::vector<std::pair<std::string, std::string>> request_headers(const Config& config, const std::string& url) {
+    std::vector<std::pair<std::string, std::string>> out;
+    if (config.http_headers.empty()) return out;
+    lib::Url parsed;
+    const std::string host = parse_url(url, parsed) ? lib::lower(parsed.host) : "";
+    const auto apply = [&](const std::string& name, const std::string& value) {
+        for (auto& h : out)
+            if (lib::iequals(h.first, name)) { h.second = value; return; }  // a later value wins
+        out.push_back({name, value});
+    };
+    for (const auto& h : config.http_headers)  // all-host first, then the URL's host
+        if (h.host.empty()) apply(h.name, h.value);
+    if (!host.empty())
+        for (const auto& h : config.http_headers)
+            if (!h.host.empty() && lib::lower(h.host) == host) apply(h.name, h.value);
+    return out;
+}
+
 bool parse_content(const std::string& text, Category c, std::vector<Item>& out, std::string& problem) {
     bool ok = false;
     // Some files are saved with a byte-order mark.
@@ -312,9 +332,23 @@ void Catalog::load_config() {
         if (url.empty()) url = urls[kCategories[i].key].str();
         config_.content_urls[i] = url.empty() ? "" : proper_url(url);
     }
+    // Custom HTTP headers: HTTP_HEADERS (every host) and HTTP_HEADERS_BY_HOST
+    // ({ "host": { "Name": "Value" } }), for servers that require a cookie/token.
+    config_.http_headers.clear();
+    const lib::Json& all_headers = prefs["HTTP_HEADERS"];
+    if (all_headers.is_object())
+        for (const auto& [name, value] : all_headers.members())
+            if (!name.empty() && !value.str().empty()) config_.http_headers.push_back({"", name, value.str()});
+    const lib::Json& by_host = prefs["HTTP_HEADERS_BY_HOST"];
+    if (by_host.is_object())
+        for (const auto& [host, headers] : by_host.members())
+            if (headers.is_object())
+                for (const auto& [name, value] : headers.members())
+                    if (!name.empty() && !value.str().empty()) config_.http_headers.push_back({host, name, value.str()});
     // FPKGi+'s own settings, under a key FPKGi leaves alone.
     const lib::Json& plus = config_json_["FPKGIPLUS"];
     config_.skip_game_update_checks = plus["skipGameUpdateChecks"].boolean(true);
+    config_.block_sony_updates = plus["blockSonyUpdates"].boolean(true);
     config_.background_downloads = plus["backgroundDownloads"].boolean(true);
     config_.connections = (int)std::max<int64_t>(1, std::min<int64_t>(8, plus["connections"].integer(4)));
     config_.theme = plus["theme"].str() == "arcade" ? "arcade" : "modern";
@@ -352,6 +386,17 @@ void Catalog::save_config() {
     lib::Json urls = lib::Json::object();
     for (int i = 0; i < (int)Category::Count; ++i) urls.set(kConfigSpelling[i], config_.content_urls[i]);
     prefs.set("CONTENT_URLS", urls);
+    // Custom HTTP headers, split back into all-host and per-host objects.
+    lib::Json all_headers = lib::Json::object();
+    std::map<std::string, lib::Json> by_host;
+    for (const auto& h : config_.http_headers) {
+        if (h.host.empty()) all_headers.set(h.name, h.value);
+        else { if (!by_host.count(h.host)) by_host[h.host] = lib::Json::object(); by_host[h.host].set(h.name, h.value); }
+    }
+    prefs.set("HTTP_HEADERS", all_headers);
+    lib::Json host_headers = lib::Json::object();
+    for (auto& [host, headers] : by_host) host_headers.set(host, headers);
+    prefs.set("HTTP_HEADERS_BY_HOST", host_headers);
     root.set("PREFERENCES", prefs);
     lib::Json plus = root["FPKGIPLUS"].is_object() ? root["FPKGIPLUS"] : lib::Json::object();
     plus.erase("installPath");  // an older build's setting
@@ -360,6 +405,7 @@ void Catalog::save_config() {
     plus.set("theme", config_.theme);
     plus.set("homebrewCategory", config_.homebrew_category);
     plus.set("skipGameUpdateChecks", config_.skip_game_update_checks);
+    plus.set("blockSonyUpdates", config_.block_sony_updates);
     plus.set("backgroundDownloads", config_.background_downloads);
     root.set("FPKGIPLUS", plus);
     config_json_ = root;
@@ -382,6 +428,7 @@ void Catalog::load_category(Category c) {
         request.url = url;
         request.max_bytes = 64ull * 1024 * 1024;
         request.timeout_seconds = 20;
+        request.headers = request_headers(config_, url);
         const lib::HttpResponse response = lib::http_request(request);
         if (response.ok()) {
             text = response.body;

@@ -4,6 +4,15 @@
      sce_sys/changeinfo/changeinfo.xml, keeping only the versions up to the
      one being built (version.json), so a note can be written before its release. -->
 <changeinfo>
+  <changes app_ver="01.03">
+    <![CDATA[
+This version contains the following changes:
+- New Installed tab: every installed game and app from your content lists in one place, with a Show filter (All, Games, Homebrew and so on) in Sort & filter
+- Blocks PlayStation Network updates for games installed as fake packages, which do not run and stop the game starting. It works in the background, with FPKGi+ closed and while you play. System software updates and games you own are left alone. Turn it off in Settings > Pre-flight checks
+- Custom HTTP headers and cookies for content lists and downloads, for servers that need sign-in (config.json: PREFERENCES > HTTP_HEADERS and HTTP_HEADERS_BY_HOST)
+- The controller works again after returning from the home screen or a system dialog
+    ]]>
+  </changes>
   <changes app_ver="01.02">
     <![CDATA[
 This version contains the following changes:

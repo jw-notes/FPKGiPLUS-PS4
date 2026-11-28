@@ -28,6 +28,7 @@ namespace store {
 namespace {
 
 std::set<std::string> g_apps, g_patches, g_addcont;
+uint64_t g_installed_revision = 0;
 std::set<std::string> g_removing;
 bool g_scanned = false;
 
@@ -96,7 +97,54 @@ void refresh_installed(bool force) {
     if (!g_scanned) LOG("installed: %zu apps, %zu updates, %zu add-on folders", g_apps.size(), g_patches.size(),
                         g_addcont.size());
     g_scanned = true;
-    if (g_apps != old_apps || g_patches != old_patches || g_addcont != old_addcont) platform::request_redraw();
+    if (g_apps != old_apps || g_patches != old_patches || g_addcont != old_addcont) {
+        ++g_installed_revision;
+        platform::request_redraw();
+    }
+}
+
+uint64_t installed_revision() { return g_installed_revision; }
+
+std::vector<std::string> installed_app_ids() {
+    if (!g_scanned) refresh_installed();
+    std::vector<std::string> out;
+    for (const auto& id : g_apps)
+        if (!g_removing.count(id)) out.push_back(id);
+    return out;
+}
+
+bool package_header_is_fake(const std::string& header) {
+    if (header.size() < 8 || header.compare(0, 4, "\x7f" "CNT") != 0) return false;
+    return ((unsigned char)header[4] & 0x80) == 0;
+}
+
+bool installed_app_package(const std::string& title_id, std::string& content_id, bool& fake) {
+    if (title_id.size() != 9 || title_id.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789") != std::string::npos)
+        return false;
+    for (const std::string& root : {system_root(), std::string("/mnt/ext0/user"), std::string("/mnt/ext1/user")}) {
+        const std::string path = lib::join_path(root, "app/" + title_id + "/app.pkg");
+        FILE* file = lib::open_file(path, "rb");
+        if (!file && lib::usb_ftp::enabled()) file = lib::usb_ftp::open_read(path);
+        if (!file) {
+#ifdef LIB_HOST
+            break;
+#endif
+            continue;
+        }
+        std::string header(0x80, '\0');
+        const bool ok = fread(&header[0], 1, header.size(), file) == header.size();
+        fclose(file);
+        if (!ok || header.compare(0, 4, "\x7f" "CNT") != 0) return false;
+        content_id = std::string(header.data() + 0x40, strnlen(header.data() + 0x40, 0x24));
+        fake = package_header_is_fake(header);
+        return !content_id.empty();
+    }
+    return false;
+}
+
+bool is_sony_source(const std::string& value) {
+    const std::string v = lib::lower(value);
+    return v.find("playstation.net") != std::string::npos || v.find("playstation.com") != std::string::npos;
 }
 
 bool is_installed(const Item& item) {
@@ -724,6 +772,13 @@ InstallResult place_in_install_folder(const std::string& file, const Item& item)
     r.ok = true;
     r.message = item.name + " is ready: install it from Debug settings > Package installer.";
     return r;
+}
+
+bool installer_owns_task(int32_t task_id) {
+    if (task_id < 0) return false;
+    for (const auto& record : g_pending.items())
+        if ((int32_t)record["task"].integer(-1) == task_id) return true;
+    return false;
 }
 
 }  // namespace store

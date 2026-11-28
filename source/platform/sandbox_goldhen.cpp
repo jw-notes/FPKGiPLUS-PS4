@@ -69,6 +69,13 @@ private:
 jailbreak_backup g_backup{};
 bool g_lifted = false;
 bool g_jbc_active = false;
+// The update blocker borrows credentials every scan pass; after the first
+// couple, the routine borrow/restore lines are suppressed (failures still log).
+int g_borrow_cycles = 0;
+bool borrow_quiet() { return g_borrow_cycles > 2; }
+// Authority-only borrow state (stays in the sandbox; see borrow_authority).
+bool g_auth_held = false;
+jbc_cred g_auth_backup{};
 jbc_cred g_jbc_backup{};
 using JbcGet = int (*)(jbc_cred*);
 using JbcSet = int (*)(const jbc_cred*);
@@ -114,8 +121,10 @@ void log_identity(const char* when) {
     return ok;
 }
 
-bool itemzflow_jailbreak() {
-    IgnoreSigSys guard;
+// Loads the Itemzflow helper prx and resolves its calls; true when the
+// kernel-call interface is live. Shared by the full jailbreak and the
+// authority-only borrow.
+bool load_jbc_helper() {
     if (!g_jbc_get) {
         const int module = sceKernelLoadStartModule("/app0/sce_module/fpkgi-jbc.prx", 0, nullptr, 0, nullptr, nullptr);
         if (module < 0) {
@@ -138,6 +147,12 @@ bool itemzflow_jailbreak() {
         LOG("services: Itemzflow helper's kernel-call interface is unavailable");
         return false;
     }
+    return true;
+}
+
+bool itemzflow_jailbreak() {
+    IgnoreSigSys guard;
+    if (!load_jbc_helper()) return false;
     if (g_jbc_get(&g_jbc_backup) != 0) {
         LOG("services: Itemzflow helper could not save app credentials");
         return false;
@@ -145,15 +160,18 @@ bool itemzflow_jailbreak() {
     jbc_cred system = g_jbc_backup;
     if (g_jbc_lift(&system) != 0) return false;
     const int rc = g_jbc_set(&system);
-    LOG("services: Itemzflow credentials -> %d, auth %016llx, caps %016llx", rc,
-        (unsigned long long)system.sceProcType, (unsigned long long)system.sceProcCap);
     if (rc != 0 || sceKernelIsInSandbox() != 0) {
+        LOG("services: Itemzflow credentials -> %d, auth %016llx, caps %016llx (sandbox %d)", rc,
+            (unsigned long long)system.sceProcType, (unsigned long long)system.sceProcCap, sceKernelIsInSandbox());
         g_jbc_set(&g_jbc_backup);
         return false;
     }
+    if (!borrow_quiet())
+        LOG("services: Itemzflow credentials -> %d, auth %016llx, caps %016llx", rc,
+            (unsigned long long)system.sceProcType, (unsigned long long)system.sceProcCap);
     g_jbc_active = true;
     g_lifted = true;
-    log_identity("Itemzflow helper");
+    if (!borrow_quiet()) log_identity("Itemzflow helper");
     return true;
 }
 
@@ -183,6 +201,9 @@ bool lifted() { return g_lifted; }
 
 bool leave() {
     if (g_lifted) return true;
+    // Already borrowing with the helper (the blocker's repeat passes): skip the
+    // GoldHEN SDK probe and its log lines, go straight to the helper.
+    if (g_jbc_active) return itemzflow_jailbreak();
     uint32_t version;
     int err;
     {
@@ -229,7 +250,9 @@ void restore() {
         rc = g_jbc_active ? g_jbc_set(&g_jbc_backup) : sys_sdk_unjailbreak(&g_backup);
     }
     g_lifted = false;
-    LOG("services: restoring app credentials through %s, rc %d", method(), rc);
+    if (rc != 0 || !borrow_quiet())
+        LOG("services: restoring app credentials through %s, rc %d", method(), rc);
+    ++g_borrow_cycles;  // count a completed borrow/restore cycle; later ones are quiet
 }
 
 void with_app_credentials(const std::function<void()>& fn) {
@@ -241,6 +264,50 @@ void with_app_credentials(const std::function<void()>& fn) {
     fn();
     // The backup now holds the app's credentials again.
     jailbreak();
+}
+
+// ---- authority-only borrow (stays inside the filesystem sandbox) ----
+// Leaving the sandbox in the background service froze the console. This borrows
+// ONLY the authority fields (process type, Sony cred, capabilities) and keeps
+// the filesystem jail (prison/cdir/rdir/jdir) untouched, so the process stays
+// sandboxed (sceKernelIsInSandbox() stays 1). It is enough privilege for the
+// download-queue calls without the full escape. Refuses (and changes nothing)
+// if the helper is unavailable or if the process would end up outside the jail.
+bool borrow_authority() {
+    IgnoreSigSys guard;
+    if (g_auth_held) return true;
+    if (!load_jbc_helper()) return false;
+    jbc_cred current;
+    if (g_jbc_get(&current) != 0) return false;
+    jbc_cred lifted = current;
+    if (g_jbc_lift(&lifted) != 0) return false;  // full lift: authority + escaped dirs
+    jbc_cred borrow = current;                   // keep MY prison/cdir/rdir/jdir
+    borrow.sceProcType = lifted.sceProcType;
+    borrow.sonyCred = lifted.sonyCred;
+    borrow.sceProcCap = lifted.sceProcCap;
+    if (g_jbc_set(&borrow) != 0) return false;
+    if (sceKernelIsInSandbox() == 0) {
+        // Unexpected: authority-only must not escape the jail. Undo and refuse.
+        g_jbc_set(&current);
+        LOG("services: authority borrow unexpectedly left the sandbox; reverted");
+        return false;
+    }
+    g_auth_backup = current;
+    g_auth_held = true;
+    g_jbc_active = true;  // the helper is confirmed working
+    if (!borrow_quiet())
+        LOG("services: authority borrowed, auth %016llx caps %016llx, still sandboxed",
+            (unsigned long long)borrow.sceProcType, (unsigned long long)borrow.sceProcCap);
+    return true;
+}
+
+void restore_authority() {
+    if (!g_auth_held) return;
+    IgnoreSigSys guard;
+    const int rc = g_jbc_set(&g_auth_backup);
+    g_auth_held = false;
+    if (rc != 0 || !borrow_quiet()) LOG("services: authority handed back, rc %d", rc);
+    ++g_borrow_cycles;
 }
 
 }  // namespace platform::sandbox

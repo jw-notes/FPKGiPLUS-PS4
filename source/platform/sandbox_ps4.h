@@ -24,4 +24,11 @@ bool lifted();
 // Runs `fn` with the app's original credentials, then steps out again.
 void with_app_credentials(const std::function<void()>& fn);
 
+// Borrows only the authority (process type, Sony cred, capabilities) while
+// keeping the filesystem jail, so the process STAYS in the sandbox. For the
+// background service to reach the download queue without the full escape that
+// froze the console. False (no change) when unavailable or if it would escape.
+bool borrow_authority();
+void restore_authority();
+
 }  // namespace platform::sandbox

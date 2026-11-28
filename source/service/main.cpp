@@ -16,6 +16,12 @@
 // Installing stays with the app, which installs a finished download when it
 // is open or the next time it is opened.
 //
+// It also runs the update blocker (store/installer.h): PlayStation Network
+// downloads for games installed as fPKGs are stopped as they appear, with
+// FPKGi+ closed and while games run. It reports what it is doing in
+// <data>/service/blocker.json, and the app watches the queue itself when
+// the service cannot (FPKGIPLUS.blockSonyUpdates turns it off).
+//
 // It stops when <data>/service/stop appears (FPKGi+ asks for that before it
 // replaces or removes the service).
 #include <stdarg.h>
@@ -41,6 +47,7 @@
 #include "platform/platform.h"
 #include "store/catalog.h"
 #include "store/downloads.h"
+#include "store/installer.h"
 
 namespace {
 
@@ -199,6 +206,7 @@ int main() {
         queue.service_apply_commands();
         watch_screen(watch);
         announce_changes(watch);
+        for (const std::string& message : store::update_blocker_tick(true)) notify(watch, message);
         // Settings changed in the app (connections, destination): read again.
         const uint64_t now = platform::now_ms();
         if (now - settings_checked >= 5000) {

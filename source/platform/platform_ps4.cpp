@@ -260,13 +260,70 @@ void present() {
     g_frame ^= 1;
 }
 
+// The system's view of the app: whether its UI (home screen, a dialog) is over
+// FPKGi+, or FPKGi+ is in the background. The SDK declares these without their
+// structures; the layouts are the system's own.
+struct SystemStatus {
+    int32_t event_count;
+    bool ui_overlaid, in_background, cpu_mode7, streaming, out_of_vr_area;
+    uint8_t reserved[125];
+};
+struct SystemEvent {
+    int32_t type;
+    uint8_t data[8192 + 64];
+};
+extern "C" int32_t lib_system_status(SystemStatus* status) __asm__("sceSystemServiceGetStatus");
+extern "C" int32_t lib_system_event(SystemEvent* event) __asm__("sceSystemServiceReceiveEvent");
+
+// Reads the system's events (an app is expected to) and follows focus. After
+// the home screen or a system dialog, the controller did not come back to
+// FPKGi+: the pad is opened again when the app is in front once more.
+void follow_focus(uint64_t now) {
+    static uint64_t next = 0;
+    static bool was_away = false, first = true;
+    if (now < next) return;
+    next = now + 250;
+    SystemStatus status{};
+    const int rc = lib_system_status(&status);
+    if (rc < 0) {
+        if (first) LOG("focus: system status unavailable 0x%08x", (unsigned)rc);
+        first = false;
+        return;
+    }
+    for (int i = 0; i < status.event_count && i < 16; ++i) {
+        static SystemEvent event;
+        const int erc = lib_system_event(&event);
+        LOG("focus: system event %d -> 0x%08x", event.type, (unsigned)erc);
+        if (erc < 0) break;
+    }
+    const bool away = status.ui_overlaid || status.in_background;
+    if (first || away != was_away)
+        LOG("focus: system UI over the app %d, in background %d", status.ui_overlaid, status.in_background);
+    if (was_away && !away && g_pad >= 0) {
+        scePadClose(g_pad);
+        int user = 0;
+        if (sceUserServiceGetInitialUser(&user) >= 0) g_user = user;
+        g_pad = scePadOpen(g_user, 0, 0, nullptr);
+        g_light = 0xFFFFFFFF;
+        LOG("focus: back in front, controller reopened -> 0x%08x", (unsigned)g_pad);
+    }
+    was_away = away;
+    first = false;
+}
+
 Pad read_pad() {
     static bool was_connected = true;
     static uint64_t gone_since = 0;
+    static uint32_t last_intercept = 0;
     Pad pad;
     OrbisPadData data{};
+    follow_focus(now_ms());
     const bool ok = g_pad >= 0 && scePadReadState(g_pad, &data) >= 0 && data.connected;
     const uint64_t now = now_ms();
+    if (ok && (data.buttons & 0x80000000u) != last_intercept) {
+        last_intercept = data.buttons & 0x80000000u;
+        LOG("controller: system %s input", last_intercept ? "takes" : "returns");
+    }
     if (ok != was_connected) {
         was_connected = ok;
         LOG(ok ? "controller connected" : "controller disconnected");

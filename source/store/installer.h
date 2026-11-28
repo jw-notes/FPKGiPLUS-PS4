@@ -14,6 +14,7 @@
 // The service is only reachable after GoldHEN's jailbreak (platform).
 #include <functional>
 #include <string>
+#include <vector>
 
 #include "store/catalog.h"
 
@@ -116,6 +117,40 @@ InstallResult launch_title(const Item& item);
 // A nonempty problem also prevents system titles and FPKGi+ from being removed.
 std::string app_delete_problem(const Item& item);
 InstallResult delete_app(const Item& item);
+// Changes whenever the installed apps, updates or add-ons change.
+uint64_t installed_revision();
+// Title IDs with an installed app (/user/app/<id>).
+std::vector<std::string> installed_app_ids();
+
+// ---- blocking Sony's downloads over fPKG installs ----
+// An official update (or a full re-download) from PlayStation Network does
+// not run on a fake package, and replaces or breaks the game. The blocker
+// looks at the console's download queue for titles installed as fPKGs and
+// stops a download only when its source is a playstation.net URL: FPKGi+'s
+// own installs, Package Installer installs and retail-licensed games are
+// left alone.
+//
+// From the first 0x80 bytes of /user/app/<id>/app.pkg: its content ID, and
+// whether it is a fake (debug-signed) package. Retail packages have the top
+// bit of the header's type (offset 4, big-endian) set: 0x83000001 for a
+// retail game against 0x40000001 for an fPKG. False when it cannot be read.
+bool installed_app_package(const std::string& title_id, std::string& content_id, bool& fake);
+bool package_header_is_fake(const std::string& header);
+// True for a task FPKGi+ registered itself (a recorded install).
+bool installer_owns_task(int32_t task_id);
+// True when a value read from a download task names Sony's servers.
+bool is_sony_source(const std::string& value);
+// Called every frame by the app and every tick by the background service;
+// checks the queue every few seconds. Messages are for toasts (the app also
+// shows a console notification; the service shows its own).
+// The service watches the queue whenever it can, so it works with FPKGi+
+// closed and while games run; the app then only keeps the list of installed
+// fPKGs up to date for it (<data>/service/fpkg-titles.json) and watches the
+// queue itself when the service does not (service_blocker_active).
+// FPKGIPLUS.blockSonyUpdates (Settings > Pre-flight checks) turns both off.
+std::vector<std::string> update_blocker_tick(bool from_service = false);
+// True while the background service reports that it is watching the queue.
+bool service_blocker_active();
 // Re-reads the folders above (after an install, or when the app is resumed).
 // The folders are read again at most every few seconds, unless `force`.
 void refresh_installed(bool force = false);

@@ -72,6 +72,14 @@ BoxStyle box_style(const Item& item) {
 
 bool g_loading = false;
 std::string g_search;  // shared by every tab
+// The Installed tab's "Show" filter: one list (Games, Homebrew...) or, with
+// Category::Count, all of them. For this run of the app.
+Category g_installed_show = Category::Count;
+
+// Lists whose installed titles the Installed tab shows.
+bool installed_tab_list(Category c) {
+    return c != Category::Updates && c != Category::DLC && c != Category::Themes && c != Category::PS5;
+}
 
 void forget_file_states();
 
@@ -365,7 +373,8 @@ constexpr int kPanelX = kMarginX + kCols * kColPitch + 24;  // 1260
 
 class StoreScreen : public Screen {
 public:
-    StoreScreen(int tab, Category category) : tab_(tab), category_(category) { rebuild(); }
+    StoreScreen(int tab, Category category, bool installed = false)
+        : tab_(tab), category_(category), installed_(installed) { rebuild(); }
 
     int tab() const override { return tab_; }
     bool own_background() const override { return true; }
@@ -393,7 +402,7 @@ public:
             return;
         }
         if (in.press(kTriangle)) {
-            open_options_menu(category_);
+            open_options_menu(category_, installed_);
             return;
         }
         if (in.press(kSquare) || in.press(kTouchPad)) {
@@ -402,6 +411,8 @@ public:
             });
             return;
         }
+        // The Installed tab follows installs and removals as they happen.
+        if (installed_ && built_revision_ != store::installed_revision()) rebuild();
         if (order_.empty()) return;
         nav_.update(in, (int)order_.size(), cols(), rows());
         if (arcade()) {  // a list: left and right jump a page
@@ -442,8 +453,9 @@ public:
         // Title row: category, count, search, sort.
         const int y0 = 150;
         int x = kGridX;
-        std::string heading = store::category_name(category_);
-        if (category_ == Category::Homebrew && cat->config().homebrew_category != "All")
+        std::string heading = installed_ ? "Installed" : store::category_name(category_);
+        if (installed_ && g_installed_show != Category::Count) heading += std::string(" / ") + store::category_name(g_installed_show);
+        if (!installed_ && category_ == Category::Homebrew && cat->config().homebrew_category != "All")
             heading += " / " + cat->config().homebrew_category;
         x += gfx::draw_text(c, Face::SansBold, 40, x, y0, heading, t.text) + 20;
         const std::string count = lib::format_count(order_.size()) + (order_.size() == 1 ? " title" : " titles");
@@ -457,6 +469,14 @@ public:
                        t.faint);
 
         if (order_.empty()) {
+            if (installed_ && g_search.empty()) {
+                draw_message(c, {kGridX, kGridY, kCols * kColPitch, kRows * kRowPitch}, "Nothing installed yet",
+                             g_installed_show == Category::Count
+                                 ? "Games and apps from your content lists appear here once they are installed on the console."
+                                 : std::string("No installed titles from ") + store::category_name(g_installed_show) +
+                                       ". Change Show in Sort & filter.");
+                return;
+            }
             draw_message(c, {kGridX, kGridY, kCols * kColPitch, kRows * kRowPitch}, "Nothing matches",
                          g_search.empty() ? "No titles here in the regions chosen in Options."
                                           : "No title's name or title ID starts with \"" + g_search + "\".");
@@ -464,9 +484,8 @@ public:
         }
 
         const auto jobs = store::downloads().snapshot();
-        const auto& items = cat->items(category_);
         if (arcade()) {
-            draw_arcade_list(c, items, jobs);
+            draw_arcade_list(c, jobs);
             draw_panel_for(c, current(), full_status(current(), jobs));
             return;
         }
@@ -475,14 +494,14 @@ public:
         const int box_h = box_height(kBoxW);
         // Covers of the next rows start loading before they are reached.
         for (int i = last; i < std::min((int)order_.size(), last + kCols * 2); ++i) {
-            const Item& it = items[order_[i]];
+            const Item& it = at(i);
             const int bw = kBoxW - 2 * (kBoxW * 3 / 100);
             if (!it.cover_url.empty())
                 gfx::image_get(store::cover_source(it), bw, box_h - bw * 135 / 1000, gfx::Fit::Cover);
         }
         Rect focus_rect;
         for (int i = first; i < last; ++i) {
-            const Item& it = items[order_[i]];
+            const Item& it = at(i);
             const int col = (i - first) % kCols, row = (i - first) / kCols;
             const Rect r{kGridX + col * kColPitch, kGridY + row * kRowPitch, kBoxW, box_h};
             const bool focused = i == nav_.index;
@@ -505,7 +524,8 @@ public:
     }
 
 private:
-    const Item& current() const { return store::catalog()->items(category_)[order_[nav_.index]]; }
+    const Item& at(int i) const { return store::catalog()->items(order_[i].first)[order_[i].second]; }
+    const Item& current() const { return at(nav_.index); }
 
     std::string sort_label() const {
         const auto& cfg = store::catalog()->config();
@@ -518,20 +538,43 @@ private:
         std::string keep = order_.empty() || nav_.index >= (int)order_.size() ? "" : current().url;
         order_.clear();
         if (!cat->loaded()) return;
-        const auto& items = cat->items(category_);
         const auto& cfg = cat->config();
         const std::string q = lib::lower(g_search);
-        for (int i = 0; i < (int)items.size(); ++i) {
-            const Item& it = items[i];
-            if (category_ == Category::Homebrew && cfg.homebrew_category != "All" &&
-                it.homebrew_category != cfg.homebrew_category) continue;
-            if (!store::region_shown(cfg, it.region)) continue;
-            if (!q.empty() && !lib::icontains(it.name, q) && !lib::starts_with(lib::lower(it.title_id), q)) continue;
-            order_.push_back(i);
+        const auto matches = [&](const Item& it) {
+            return q.empty() || lib::icontains(it.name, q) || lib::starts_with(lib::lower(it.title_id), q);
+        };
+        if (installed_) {
+            // Every installed game or app from the lists, once per title ID.
+            // Region and homebrew filters do not hide what is on the console.
+            // Updates and add-ons belong to their game (its page lists them).
+            built_revision_ = store::installed_revision();
+            std::set<std::string> seen;
+            for (Category c : kTabOrder) {
+                if (!installed_tab_list(c)) continue;
+                if (g_installed_show != Category::Count && c != g_installed_show) continue;
+                const auto& items = cat->items(c);
+                for (int i = 0; i < (int)items.size(); ++i) {
+                    const Item& it = items[i];
+                    if (it.ps5 || it.title_id.empty() || !store::is_installed(it) || !matches(it)) continue;
+                    if (seen.insert(it.title_id).second) order_.push_back({c, i});
+                }
+            }
+        } else {
+            const auto& items = cat->items(category_);
+            for (int i = 0; i < (int)items.size(); ++i) {
+                const Item& it = items[i];
+                if (category_ == Category::Homebrew && cfg.homebrew_category != "All" &&
+                    it.homebrew_category != cfg.homebrew_category) continue;
+                if (!store::region_shown(cfg, it.region)) continue;
+                if (!matches(it)) continue;
+                order_.push_back({category_, i});
+            }
         }
-        auto key_less = [&](int a, int b) {
-            const Item& x = items[a];
-            const Item& y = items[b];
+        using Ref = std::pair<Category, int>;
+        const auto item_of = [&](const Ref& r) -> const Item& { return cat->items(r.first)[r.second]; };
+        auto key_less = [&](const Ref& a, const Ref& b) {
+            const Item& x = item_of(a);
+            const Item& y = item_of(b);
             if (cfg.sort == "size" && x.size != y.size) return x.size < y.size;
             if (cfg.sort == "region" && x.region != y.region) return x.region < y.region;
             if (cfg.sort == "titleid" && x.title_id != y.title_id) return x.title_id < y.title_id;
@@ -539,12 +582,12 @@ private:
             if (xn != yn) return lib::natural_less(xn, yn);
             return a < b;
         };
-        std::stable_sort(order_.begin(), order_.end(), [&](int a, int b) {
+        std::stable_sort(order_.begin(), order_.end(), [&](const Ref& a, const Ref& b) {
             return cfg.ascending ? key_less(a, b) : key_less(b, a);
         });
         nav_.index = 0;
         for (int i = 0; i < (int)order_.size(); ++i)
-            if (items[order_[i]].url == keep) nav_.index = i;
+            if (item_of(order_[i]).url == keep) nav_.index = i;
         nav_.top_row = std::max(0, nav_.index / cols() - 1);
         nav_.clamp((int)order_.size(), cols(), rows());
         built_search_ = g_search;
@@ -557,7 +600,7 @@ private:
 
     // The arcade theme's picker: a double-framed black box of numbered names in
     // the pixel font; the cursor is a solid bar with a blinking arrow.
-    void draw_arcade_list(Canvas& c, const std::vector<Item>& items, const std::vector<store::Job>& jobs) {
+    void draw_arcade_list(Canvas& c, const std::vector<store::Job>& jobs) {
         const Theme& t = theme();
         const int x = kGridX, w = kPanelX - 40 - kGridX, y0 = kGridY - 12, h = kListRows * kListPitch + 28;
         c.fill({x, y0, w, h}, gfx::rgb(0x000000));
@@ -567,7 +610,7 @@ private:
         const int line = gfx::font_metrics(Face::Pixel, 24).line_height;
         const int small = gfx::font_metrics(Face::Pixel, 16).line_height;
         for (int i = first; i < last; ++i) {
-            const Item& it = items[order_[i]];
+            const Item& it = at(i);
             const bool on = i == nav_.index;
             const Rect row{x + 14, y0 + 14 + (i - first) * kListPitch, w - 28, kListPitch - 4};
             if (on) c.fill(row, t.accent);
@@ -676,7 +719,9 @@ private:
 
     int tab_;
     Category category_;
-    std::vector<int> order_;
+    bool installed_ = false;  // the Installed tab: installed titles of every category
+    uint64_t built_revision_ = 0;
+    std::vector<std::pair<Category, int>> order_;  // (list, index in it)
     GridNav nav_;
     Backdrop backdrop_;
     std::string built_search_;
@@ -1558,9 +1603,45 @@ void get_item(const Item& item) {
     get_item_direct(item);
 }
 
-void open_options_menu(store::Category category) {
+void open_options_menu(store::Category category, bool installed) {
     auto cat = store::catalog();
     std::vector<MenuItem> items;
+    if (installed) {
+        // All, then each list that has installed titles, with how many.
+        std::vector<std::pair<Category, int>> choices{{Category::Count, 0}};
+        for (Category c : kTabOrder) {
+            if (!installed_tab_list(c)) continue;
+            std::set<std::string> ids;
+            for (const auto& item : cat->items(c))
+                if (!item.ps5 && !item.title_id.empty() && store::is_installed(item)) ids.insert(item.title_id);
+            if (!ids.empty()) choices.push_back({c, (int)ids.size()});
+        }
+        if (g_installed_show != Category::Count) {
+            bool listed = false;
+            for (const auto& choice : choices) listed = listed || choice.first == g_installed_show;
+            if (!listed) choices.push_back({g_installed_show, 0});
+        }
+        MenuItem show{"Show",
+                      [choices] {
+                          for (const auto& choice : choices)
+                              if (choice.first == g_installed_show)
+                                  return choice.first == Category::Count
+                                             ? std::string("All")
+                                             : std::string(store::category_name(choice.first)) + " (" +
+                                                   std::to_string(choice.second) + ")";
+                          return std::string("All");
+                      },
+                      nullptr,
+                      [choices](int dir) {
+                          int i = 0;
+                          for (int k = 0; k < (int)choices.size(); ++k)
+                              if (choices[k].first == g_installed_show) i = k;
+                          const int n = (int)choices.size();
+                          g_installed_show = choices[((i + dir) % n + n) % n].first;
+                      }};
+        show.stay_open = true;
+        items.push_back(show);
+    }
     if (category == Category::Homebrew) {
         items.push_back({"Homebrew category", [cat] { return cat->config().homebrew_category; }, [cat] {
             std::vector<MenuItem> groups;
@@ -1616,7 +1697,9 @@ void open_options_menu(store::Category category) {
                    }};
     order.stay_open = true;
     items.push_back(order);
+    // The Installed tab shows what is on the console whatever its region.
     for (const char* region : {"USA", "Europe", "Japan", "Asia"}) {
+        if (installed) break;
         const std::string name = region;
         MenuItem r{"Show " + name,
                    [cat, name] {
@@ -1862,14 +1945,27 @@ private:
             [cat](int) { cat->config().install_after = !cat->config().install_after; cat->save_config(); }, false});
         rows_.push_back({"Delete PKG after successful install", onoff(cfg.cleanup_after_install), nullptr,
             [cat](int) { cat->config().cleanup_after_install = !cat->config().cleanup_after_install; cat->save_config(); }, false});
+        // What happens around starting a game: the launcher's own checks, and
+        // PlayStation Network updates that would replace or break an fPKG.
+        rows_.push_back({"Pre-flight checks", "", nullptr, nullptr, true});
         rows_.push_back({"Skip launcher preflight checks", onoff(cfg.skip_game_update_checks), nullptr,
             [cat](int) { cat->config().skip_game_update_checks = !cat->config().skip_game_update_checks; cat->save_config(); }, false});
-        rows_.push_back({"Sony game update downloads", "Help", [] {
-            open_menu("Sony game updates", {{"Close", nullptr, [] {}, nullptr}},
-                "Launcher checks do not block Sony's background update service. In PS4 Settings > System > Automatic Downloads, "
-                "turn off Application Update Files. Remove a failed Sony update from Notifications > Downloads. "
-                "For launch-triggered checks too, block PlayStation update servers through your router/DNS, or disconnect the console from the internet before launching. "
-                "FPKGi+ does not change your console's network settings.");
+        rows_.push_back({"Block PlayStation Network updates",
+            !cfg.block_sony_updates ? "Off" : store::service_blocker_active() ? "On (background)" : "On (while FPKGi+ is open)",
+            nullptr,
+            [cat](int) {
+                cat->config().block_sony_updates = !cat->config().block_sony_updates;
+                cat->save_config();  // the background service reads it again within a few seconds
+            }, false});
+        rows_.push_back({"About update blocking", "Help", [] {
+            open_menu("PlayStation Network updates", {{"Close", nullptr, [] {}, nullptr}},
+                "An official update from PlayStation Network does not run on a game installed as an fPKG: the game stops "
+                "starting. With Block PlayStation Network updates on, FPKGi+ removes such downloads from the console's queue "
+                "as they appear and tells you. It runs in the background downloader, so it works with FPKGi+ closed and "
+                "while you play; without the background downloader it works only while FPKGi+ is open. Your own installs, "
+                "Package Installer installs, system software updates and games you own on disc or from the Store are left alone.\n\n"
+                "To stop the console downloading them at all, turn off Application Update Files in PS4 Settings > System > "
+                "Automatic Downloads.");
         }, nullptr, false});
         rows_.push_back({"Content", "", nullptr, nullptr, true});
         rows_.push_back({"Content sources", "", [] { open_content_sources(); }, nullptr, false});
@@ -2004,12 +2100,13 @@ void SettingsScreen::open_about() {
     open_menu("About FPKGi+", std::move(items), body);
 }
 
-// ---- the header's tabs: categories, then Downloads and Settings ----------------------------
+// ---- the header's tabs: categories, Installed, then Downloads and Settings ----------------
 
 std::vector<std::string> tab_names() {
     std::vector<std::string> names;
     for (Category c : visible_categories()) names.push_back(store::category_name(c));
     if (names.empty()) names.push_back("Store");
+    else names.push_back("Installed");  // only once there are lists to match installs against
     names.push_back("Downloads");
     names.push_back("Settings");
     return names;
@@ -2017,10 +2114,16 @@ std::vector<std::string> tab_names() {
 
 std::unique_ptr<Screen> make_tab_screen(int tab) {
     const auto cats = visible_categories();
-    const int n = std::max(1, (int)cats.size());
-    if (tab == n + 1) return std::make_unique<SettingsScreen>(tab);
-    if (tab >= n) return std::make_unique<DownloadsScreen>(tab);
-    return std::make_unique<StoreScreen>(tab, cats.empty() ? Category::Games : cats[tab]);
+    const int n = (int)cats.size();
+    if (n == 0) {  // Store, Downloads, Settings
+        if (tab == 2) return std::make_unique<SettingsScreen>(tab);
+        if (tab == 1) return std::make_unique<DownloadsScreen>(tab);
+        return std::make_unique<StoreScreen>(tab, Category::Games);
+    }
+    if (tab == n + 2) return std::make_unique<SettingsScreen>(tab);
+    if (tab == n + 1) return std::make_unique<DownloadsScreen>(tab);
+    if (tab == n) return std::make_unique<StoreScreen>(tab, Category::Games, true);
+    return std::make_unique<StoreScreen>(tab, cats[tab]);
 }
 
 }  // namespace ui

@@ -4,6 +4,7 @@
 // and third-party notices: see the NOTICE file.
 
 #include "ui/app.h"
+#include "ui/screens.h"
 #include "ui/theme.h"
 
 #include <algorithm>
@@ -126,6 +127,7 @@ void App::run() {
         store::refresh_installed();
         for (const std::string& m : store::downloads().tick()) toast(m);
         for (const std::string& m : store::installer_tick()) toast(m);
+        for (const std::string& m : store::update_blocker_tick()) toast(m);
         // A newer FPKGi+: said once, wherever the user is.
         static bool update_told = false;
         if (!update_told && store::updater::state() == store::updater::State::Available) {

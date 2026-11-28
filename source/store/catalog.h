@@ -67,6 +67,9 @@ struct Config {
     bool install_after = false;
     bool cleanup_after_install = false;
     bool skip_game_update_checks = true;
+    // Stop PlayStation Network downloads for titles installed as fPKGs
+    // (store/installer.h, update blocker). FPKGIPLUS.blockSonyUpdates.
+    bool block_sony_updates = true;
     // Downloads run in the background downloader (store/service.h) when it
     // can be used. FPKGIPLUS.backgroundDownloads; read when FPKGi+ starts.
     bool background_downloads = true;
@@ -79,7 +82,16 @@ struct Config {
     bool ascending = true;
     std::vector<std::string> regions{"Asia", "Europe", "Japan", "USA"};
     std::string content_urls[(int)Category::Count];
+    // Extra HTTP headers for catalogue fetches and downloads, for servers that
+    // need a cookie or token (config.json PREFERENCES.HTTP_HEADERS for every
+    // host, HTTP_HEADERS_BY_HOST for one host). host empty: sent to every host.
+    struct HttpHeader { std::string host, name, value; };
+    std::vector<HttpHeader> http_headers;
 };
+
+// The headers from `config` that apply to `url`: the all-host ones, then any
+// whose host matches the URL's (a later one overrides an earlier same name).
+std::vector<std::pair<std::string, std::string>> request_headers(const Config& config, const std::string& url);
 
 // Resolve USB automatically when only one drive is connected. With multiple
 // drives, keep an explicitly selected connected drive or request a choice.

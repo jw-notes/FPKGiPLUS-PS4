@@ -48,12 +48,16 @@ const Copy kFiles[] = {
     {"service/service.self", "eboot.bin"},
     {"sce_module/libc.prx", "sce_module/libc.prx"},
     {"sce_module/libSceFios2.prx", "sce_module/libSceFios2.prx"},
+    // The Itemzflow credential helper. The update blocker uses it to borrow
+    // ONLY authority (staying in the sandbox; installer_ps4.cpp), never to
+    // leave the sandbox, which destabilised the console.
+    {"sce_module/fpkgi-jbc.prx", "sce_module/fpkgi-jbc.prx"},
     {"assets/cacert.pem", "assets/cacert.pem"},
     {"assets/godaddy-secure-g2.pem", "assets/godaddy-secure-g2.pem"},
     {"assets/letsencrypt-gen-y.pem", "assets/letsencrypt-gen-y.pem"},
 };
 // Left by earlier test builds; removed with the service.
-const char* const kOldFiles[] = {"Media/fpkgi-jbc.prx", "sce_module/fpkgi-jbc.prx"};
+const char* const kOldFiles[] = {"Media/fpkgi-jbc.prx"};
 
 std::string g_problem;
 
