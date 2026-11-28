@@ -60,6 +60,7 @@ def copy_files() -> None:
     shutil.copyfile(ROOT / "assets/cacert.pem", PKG / "assets/cacert.pem")
     shutil.copyfile(ROOT / "assets/godaddy-secure-g2.pem", PKG / "assets/godaddy-secure-g2.pem")
     shutil.copyfile(ROOT / "assets/letsencrypt-gen-y.pem", PKG / "assets/letsencrypt-gen-y.pem")
+    shutil.copyfile(ROOT / "assets/digicert-playstation.pem", PKG / "assets/digicert-playstation.pem")
     shutil.copyfile(ROOT / "assets/icon0.png", PKG / "sce_sys/icon0.png")
     shutil.copyfile(ROOT / "assets/pic1.png", PKG / "sce_sys/pic1.png")
     for name, dest in [("right.sprx", "sce_sys/about/right.sprx"), ("libc.prx", "sce_module/libc.prx"),
@@ -76,6 +77,8 @@ def copy_files() -> None:
     shutil.copyfile(ROOT / "assets/cacert-SOURCE.txt", PKG / "licenses/cacert-SOURCE.txt")
     shutil.copyfile(ROOT / "assets/godaddy-secure-g2-SOURCE.txt", PKG / "licenses/godaddy-secure-g2-SOURCE.txt")
     shutil.copyfile(ROOT / "assets/letsencrypt-gen-y-SOURCE.txt", PKG / "licenses/letsencrypt-gen-y-SOURCE.txt")
+    shutil.copyfile(ROOT / "assets/digicert-playstation-SOURCE.txt", PKG / "licenses/digicert-playstation-SOURCE.txt")
+    shutil.copyfile(ROOT / "assets/media-libraries.txt", PKG / "licenses/media-libraries.txt")
     for pattern in ("*/LICENSE*", "*/COPYING"):
         for text in (ROOT / "third_party").glob(pattern):
             shutil.copyfile(text, PKG / "licenses" / (text.parent.name + "-" + text.name + ".txt"))

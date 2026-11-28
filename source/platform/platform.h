@@ -118,6 +118,24 @@ bool audio_open();
 bool audio_output(const int16_t* block);
 void audio_close();
 
+// Trailers: one video stream at a time (on the console, streamed with MPV
+// and FFmpeg: platform/movie_mpv_ps4.cpp; elsewhere none: movie_none.cpp).
+bool movie_open(const std::string& url, std::string& problem);
+// Draws the newest decoded frame, letterboxed on black, into the frame's real
+// pixels (w x h); the last one again until the next arrives. False until the
+// first frame has been decoded.
+bool movie_draw(uint32_t* pixels, int w, int h);
+// False once the video has ended or failed.
+bool movie_active();
+uint64_t movie_position_ms();
+// The trailer's length (0 until known).
+uint64_t movie_duration_ms();
+void movie_pause(bool paused);
+void movie_seek(uint64_t ms);
+// Why the stream stopped, once it has failed ("" otherwise).
+std::string movie_problem();
+void movie_close();
+
 void background_thread_priority();
 // "free memory 812 MB", for the diagnostic log.
 std::string memory_report();

@@ -733,6 +733,271 @@ public:
     }
 };
 
+// "9.00" -> "9.00+" (that firmware or later); "" when not known.
+std::string firmware_text(std::string fw) {
+    fw = lib::trim(fw);
+    if (fw.empty() || fw == "?.??") return "";
+    return fw.back() == '+' ? fw : fw + "+";
+}
+
+// ---- screenshots and trailers (from the PlayStation Store) ---------------------
+
+// A play symbol: a disc with a triangle, over a trailer's picture.
+void draw_play_symbol(Canvas& c, int cx, int cy, int radius) {
+    c.fill_circle(cx, cy, radius, gfx::with_alpha(gfx::rgb(0x000000), 150));
+    c.stroke_circle(cx, cy, radius, std::max(2, radius / 12), gfx::rgb(0xFFFFFF));
+    const int h = radius * 9 / 10, left = cx - radius * 3 / 10;
+    for (int dy = -h / 2; dy <= h / 2; ++dy) {
+        const int len = (h / 2 - std::abs(dy)) * 9 / 5;
+        if (len > 0) c.fill({left, cy + dy, len, 1}, gfx::rgb(0xFFFFFF));
+    }
+}
+
+std::string clock_text(uint64_t ms) {
+    const uint64_t s = ms / 1000;
+    char text[32];
+    if (s >= 3600) snprintf(text, sizeof text, "%d:%02d:%02d", (int)(s / 3600), (int)(s / 60 % 60), (int)(s % 60));
+    else snprintf(text, sizeof text, "%d:%02d", (int)(s / 60), (int)(s % 60));
+    return text;
+}
+
+// A trailer, full screen. The picture shows while it loads; the controls
+// show for a few seconds after a button is pressed.
+class TrailerScreen : public Screen {
+public:
+    // Streamed: the trailer's HLS stream, from the store's video servers.
+    TrailerScreen(const Item::Trailer& trailer, std::string title)
+        : url_(trailer.url), poster_(trailer.poster), title_(std::move(title)) {}
+    ~TrailerScreen() override { platform::movie_close(); }
+    bool fullscreen() const override { return true; }
+    bool own_background() const override { return true; }
+    bool animating() const override { return true; }
+    std::vector<Hint> hints() const override {
+        if (!problem_.empty()) return {{kCircle, "Back"}};
+        return {{kCircle, "Back"}, {kLeft | kRight, "Tap: 10 s, hold: scrub"}, {kCross, paused_ ? "Play" : "Pause"}};
+    }
+
+    void update(const Input& in) override {
+        const uint64_t now = now_ms();
+        if (!opened_) {
+            opened_ = true;
+            started_at_ = now;
+            if (!platform::movie_open(url_, problem_)) LOG("trailer: %s", problem_.c_str());
+        }
+        if (in.press(kCircle)) { app().pop(); return; }
+        if (!problem_.empty()) return;
+        if (in.press(kCross)) {
+            paused_ = !paused_;
+            platform::movie_pause(paused_);
+            show_controls();
+        }
+        scrub(in, now);
+        if (in.press(kOptions) || in.press(kUp) || in.press(kDown)) show_controls();
+        // The end (or the stream failing once it had started).
+        if (playing_ && !paused_ && !holding_ && !platform::movie_active()) { app().pop(); return; }
+        // Failed before a picture came: say so.
+        if (!playing_ && opened_ && problem_.empty() && !platform::movie_active()) {
+            problem_ = platform::movie_problem();
+            if (problem_.empty()) problem_ = "The trailer could not be played.";
+            platform::movie_close();
+        }
+        if (!playing_ && now - started_at_ > 30000) {
+            problem_ = "The trailer did not start. Check the network connection and try again.";
+            platform::movie_close();
+        }
+    }
+
+    void draw(Canvas& c) override {
+        const Theme& t = theme();
+        bool frame = false;
+        if (problem_.empty() && opened_) frame = platform::movie_draw(c.pixels(), c.pixel_width(), c.pixel_height());
+        if (frame && !playing_) { playing_ = true; show_controls(); }
+        if (!frame && !playing_) {
+            c.fill({0, 0, c.width(), c.height()}, gfx::rgb(0x000000));
+            const gfx::Image* picture = poster_.empty() ? nullptr : gfx::image_get(store::screenshot_source(poster_), c.width(), c.height());
+            if (picture) c.draw_image(*picture, (c.width() - picture->lw()) / 2, (c.height() - picture->lh()) / 2, 110);
+            if (problem_.empty()) {
+                draw_spinner(c, c.width() / 2, c.height() / 2, 40);
+                const std::string text = "Loading trailer...";
+                gfx::draw_text(c, Face::Sans, kBodyPx, (c.width() - gfx::text_width(Face::Sans, kBodyPx, text)) / 2,
+                               c.height() / 2 + 70, text, t.text);
+            } else {
+                const int w = gfx::text_width(Face::Sans, kBodyPx, problem_);
+                gfx::draw_text(c, Face::Sans, kBodyPx, std::max(kMarginX, (c.width() - w) / 2), c.height() / 2 - 20, problem_, t.text);
+            }
+        }
+        if (!problem_.empty() || !playing_ || paused_ || holding_ || now_ms() < controls_until_) {
+            c.fill_vgradient({0, 0, c.width(), 170}, gfx::with_alpha(gfx::rgb(0x000000), 200), gfx::with_alpha(gfx::rgb(0x000000), 0));
+            gfx::draw_text(c, Face::SansBold, 36, kMarginX, 56, gfx::ellipsize(Face::SansBold, 36, title_, c.width() - 2 * kMarginX),
+                           gfx::rgb(0xFFFFFF));
+            if (playing_) draw_scrub_bar(c);
+            draw_footer(c, hints());
+        }
+    }
+
+private:
+    std::string url_, poster_, title_, problem_;
+    bool opened_ = false, playing_ = false, paused_ = false;
+    uint64_t started_at_ = 0, controls_until_ = 0;
+    // Left or right held: a tap skips 10 s; a hold scrubs, faster the longer
+    // it is held, and the trailer jumps there on release.
+    bool holding_ = false, scrubbing_ = false;
+    int hold_dir_ = 0;
+    uint64_t hold_since_ = 0, last_tick_ = 0;
+    double target_ms_ = 0;
+    // Just after a jump the player still reports the old time for a moment:
+    // the bar keeps showing where it is going.
+    double pending_ms_ = -1;
+    uint64_t pending_until_ = 0;
+
+    void show_controls() { controls_until_ = now_ms() + 3000; }
+
+    double shown_position() const {
+        if (holding_ && scrubbing_) return target_ms_;
+        if (pending_ms_ >= 0 && now_ms() < pending_until_) return pending_ms_;
+        return (double)platform::movie_position_ms();
+    }
+
+    void jump(double ms) {
+        const double length = (double)platform::movie_duration_ms();
+        ms = std::max(0.0, length > 0 ? std::min(ms, length - 500) : ms);
+        platform::movie_seek((uint64_t)ms);
+        pending_ms_ = ms;
+        pending_until_ = now_ms() + 1500;
+    }
+
+    void scrub(const Input& in, uint64_t now) {
+        const int dir = in.down(kRight) ? 1 : in.down(kLeft) ? -1 : 0;
+        if (!playing_) return;
+        if (dir != 0 && (!holding_ || dir == hold_dir_)) {
+            if (!holding_) {
+                holding_ = true;
+                scrubbing_ = false;
+                hold_dir_ = dir;
+                hold_since_ = last_tick_ = now;
+                target_ms_ = shown_position();
+            } else if (now - hold_since_ >= 350) {
+                // 8 s of trailer per second at first, rising to 40.
+                scrubbing_ = true;
+                const double held = (double)(now - hold_since_ - 350) / 1000.0;
+                const double rate = std::min(40.0, 8.0 + held * 16.0) * 1000.0;
+                const double length = (double)platform::movie_duration_ms();
+                target_ms_ += hold_dir_ * rate * (double)(now - last_tick_) / 1000.0;
+                target_ms_ = std::max(0.0, length > 0 ? std::min(target_ms_, length) : target_ms_);
+            }
+            last_tick_ = now;
+            show_controls();
+            return;
+        }
+        if (holding_) {
+            if (scrubbing_) jump(target_ms_);
+            else jump(shown_position() + hold_dir_ * 10000.0);
+            holding_ = scrubbing_ = false;
+            show_controls();
+        }
+    }
+
+    void draw_scrub_bar(Canvas& c) {
+        const Theme& t = theme();
+        const double length = (double)platform::movie_duration_ms();
+        const double at = shown_position();
+        const int y = kFooterTop - 64;
+        const std::string left = clock_text((uint64_t)at) + (paused_ ? "  (paused)" : "");
+        const std::string right = length > 0 ? clock_text((uint64_t)length) : "";
+        const int tw = std::max(gfx::text_width(Face::Sans, kSmallPx, "0:00:00"), gfx::text_width(Face::Sans, kSmallPx, left));
+        const int line = gfx::font_metrics(Face::Sans, kSmallPx).line_height;
+        c.fill_vgradient({0, y - 70, c.width(), c.height() - y + 70}, gfx::with_alpha(gfx::rgb(0x000000), 0),
+                         gfx::with_alpha(gfx::rgb(0x000000), 170));
+        gfx::draw_text(c, Face::Sans, kSmallPx, kMarginX, y - line / 2, left, gfx::rgb(0xFFFFFF));
+        if (!right.empty())
+            gfx::draw_text(c, Face::Sans, kSmallPx, c.width() - kMarginX - gfx::text_width(Face::Sans, kSmallPx, right), y - line / 2,
+                           right, gfx::rgb(0xFFFFFF));
+        const int x0 = kMarginX + tw + 32, x1 = c.width() - kMarginX - gfx::text_width(Face::Sans, kSmallPx, "0:00:00") - 32;
+        const int h = scrubbing_ ? 12 : 8;
+        const Rect track{x0, y - h / 2, x1 - x0, h};
+        c.fill_rounded(track, h / 2, gfx::with_alpha(gfx::rgb(0xFFFFFF), 70));
+        if (length > 0) {
+            const double f = std::max(0.0, std::min(1.0, at / length));
+            const int fill = (int)(track.w * f);
+            if (fill > 0) c.fill_rounded({track.x, track.y, std::max(fill, h), h}, h / 2, t.accent);
+            const int knob = scrubbing_ ? 16 : 11;
+            c.fill_circle(track.x + fill, y, knob, gfx::rgb(0xFFFFFF));
+            if (scrubbing_) {
+                // Where release will jump to, above the knob.
+                const std::string to = clock_text((uint64_t)at);
+                const int w = gfx::text_width(Face::SansBold, kBodyPx, to) + 28;
+                const Rect bubble{std::max(track.x, std::min(track.right() - w, track.x + fill - w / 2)), y - 82, w, 48};
+                c.fill_rounded(bubble, 12, gfx::with_alpha(gfx::rgb(0x000000), 210));
+                gfx::draw_text(c, Face::SansBold, kBodyPx, bubble.x + 14,
+                               bubble.y + (bubble.h - gfx::font_metrics(Face::SansBold, kBodyPx).line_height) / 2, to, gfx::rgb(0xFFFFFF));
+            }
+        }
+    }
+};
+
+// A title's trailers (first) and screenshots, one at a time, full screen.
+class GalleryScreen : public Screen {
+public:
+    GalleryScreen(Item item, int index) : item_(std::move(item)), index_(index) {}
+    bool fullscreen() const override { return true; }
+    bool own_background() const override { return true; }
+    bool animating() const override { return loading_; }
+    std::vector<Hint> hints() const override {
+        std::vector<Hint> out{{kCircle, "Back"}};
+        if (count() > 1) out.push_back({kLeft | kRight, "Browse"});
+        if (index_ < (int)item_.trailers.size()) out.push_back({kCross, "Play trailer"});
+        return out;
+    }
+
+    void update(const Input& in) override {
+        if (in.press(kCircle)) { app().pop(); return; }
+        const int n = count();
+        if (n == 0) return;
+        if (in.repeat(kLeft) || in.repeat(kL1)) index_ = (index_ + n - 1) % n;
+        if (in.repeat(kRight) || in.repeat(kR1)) index_ = (index_ + 1) % n;
+        if (in.press(kCross) && index_ < (int)item_.trailers.size()) {
+            const auto& trailer = item_.trailers[index_];
+            app().push(std::make_unique<TrailerScreen>(trailer, item_.name));
+        }
+    }
+
+    void draw(Canvas& c) override {
+        const Theme& t = theme();
+        c.fill({0, 0, c.width(), c.height()}, gfx::rgb(0x000000));
+        const int n = count();
+        const int trailers = (int)item_.trailers.size();
+        const bool trailer = index_ < trailers;
+        const std::string picture = n == 0 ? "" : trailer ? item_.trailers[index_].poster : item_.screenshots[index_ - trailers];
+        const std::string source = store::screenshot_source(picture);
+        const gfx::Image* image = source.empty() ? nullptr : gfx::image_get(source, c.width(), c.height());
+        loading_ = !source.empty() && !image && gfx::image_state(source) == gfx::ImageState::Loading;
+        if (image) c.draw_image(*image, (c.width() - image->lw()) / 2, (c.height() - image->lh()) / 2);
+        else if (loading_) draw_spinner(c, c.width() / 2, c.height() / 2, 40);
+        else if (!trailer || picture.empty()) {
+            const std::string text = n == 0 ? "No screenshots for this title." : "This picture could not be loaded.";
+            gfx::draw_text(c, Face::Sans, kBodyPx, (c.width() - gfx::text_width(Face::Sans, kBodyPx, text)) / 2, c.height() / 2, text, t.muted);
+        }
+        if (trailer) draw_play_symbol(c, c.width() / 2, c.height() / 2, 72);
+        c.fill_vgradient({0, 0, c.width(), 170}, gfx::with_alpha(gfx::rgb(0x000000), 190), gfx::with_alpha(gfx::rgb(0x000000), 0));
+        gfx::draw_text(c, Face::SansBold, 36, kMarginX, 56, gfx::ellipsize(Face::SansBold, 36, item_.name, c.width() - 2 * kMarginX - 420),
+                       gfx::rgb(0xFFFFFF));
+        if (n > 0) {
+            const std::string where = trailer ? "Trailer " + std::to_string(index_ + 1) + " of " + std::to_string(trailers)
+                                              : "Screenshot " + std::to_string(index_ - trailers + 1) + " of " +
+                                                    std::to_string((int)item_.screenshots.size());
+            gfx::draw_text(c, Face::Sans, kBodyPx, c.width() - kMarginX - gfx::text_width(Face::Sans, kBodyPx, where), 60, where,
+                           gfx::rgb(0xFFFFFF));
+        }
+        draw_footer(c, hints());
+    }
+
+private:
+    Item item_;
+    int index_ = 0;
+    bool loading_ = false;
+    int count() const { return (int)(item_.trailers.size() + item_.screenshots.size()); }
+};
+
 // ---- the details page --------------------------------------------------------------
 
 class DetailsScreen : public Screen {
@@ -877,28 +1142,42 @@ public:
         const int facts_top = y;
         c.push_clip({x, facts_top, w, kFooterTop - facts_top - 16});
         y -= scroll_;
-        y += gfx::draw_wrapped(c, Face::Sans, kBodyPx, x, y, w,
-                              item_.description.empty() ? "No overview supplied for this title." : item_.description,
-                              t.muted, 12) + 24;
-        // Facts.
+        // The overview, paragraph by paragraph (the store's has several).
+        if (item_.description.empty()) {
+            y += gfx::draw_wrapped(c, Face::Sans, kBodyPx, x, y, w, "No overview supplied for this title.", t.muted, 2) + 24;
+        } else {
+            int lines_left = 5;
+            // (0 only without fonts; never divided by.)
+            const int line_h = std::max(1, gfx::font_metrics(Face::Sans, kBodyPx).line_height);
+            for (const std::string& paragraph : lib::split(item_.description, '\n')) {
+                if (lines_left <= 0) break;
+                if (lib::trim(paragraph).empty()) { y += line_h / 2; continue; }
+                const int used = gfx::draw_wrapped(c, Face::Sans, kBodyPx, x, y, w, paragraph, t.muted, lines_left);
+                lines_left -= used / line_h;
+                y += used;
+            }
+            y += 24;
+        }
+        // Facts: only what is known.
         struct Row {
             const char* label;
             std::string value;
         };
+        const std::string& src = item_.metadata_source;
+        const std::string information = lib::starts_with(src, "https://store.playstation.com/") ? "PlayStation Store" :
+            lib::starts_with(src, "https://github.com/libretro-thumbnails/") ? "Screenshots: libretro-thumbnails" : "";
         std::vector<Row> rows = {{"Title ID", item_.title_id},
-                                 {"Size", size_text(item_.size)},
-                                 {"Version", item_.version.empty() ? "Unknown" : item_.version},
-                                 {"Required firmware", item_.min_fw.empty() || item_.min_fw == "?.??" ? "Unknown" : item_.min_fw},
-                                 {"Release date", item_.release_date.empty() ? "Unknown" : item_.release_date},
-                                 {"Date applies to", item_.release_date_scope.empty() ? "Not specified by source" : item_.release_date_scope},
-                                 {item_.category == Category::Homebrew ? "Creator / maintainer" : "Developer", item_.developer.empty() ? "Unknown" : item_.developer},
-                                 {"Publisher", item_.publisher.empty() ? "Unknown" : item_.publisher},
-                                 {"Genres", item_.genres.empty() ? "Unknown" : item_.genres},
-                                 {"Players", item_.players.empty() ? "Unknown" : item_.players},
-                                 {"Languages", item_.languages.empty() ? "Unknown" : item_.languages},
-                                 {"Age rating", item_.rating.empty() ? "Unknown" : item_.rating},
-                                 {"Catalogue date", item_.release.empty() ? "Unknown" : item_.release},
-                                 {"Information source", item_.metadata_source.empty() ? "Content list / local metadata" : item_.metadata_source},
+                                 {"Size", item_.size ? size_text(item_.size) : ""},
+                                 {"Version", item_.version},
+                                 {"Required firmware", firmware_text(item_.min_fw)},
+                                 {"Release date", item_.release_date},
+                                 {"Publisher", item_.publisher},
+                                 {"Developer", item_.developer},
+                                 {"Genre", item_.genres},
+                                 {"Players", item_.players},
+                                 {"Languages", item_.languages},
+                                 {"Age rating", item_.rating},
+                                 {"Information", information},
                                  {"Package", store::package_path(item_)},
                                  {"Source", host_of(item_.url)}};
         if (item_.category == Category::Homebrew) {
@@ -906,17 +1185,38 @@ public:
                     {"Credits", item_.developer.empty() ? "Not supplied" : item_.developer},
                     {"Version", item_.version.empty() ? "Unknown" : item_.version},
                     {"Latest release", item_.latest_release_date.empty() ? "Unknown" : item_.latest_release_date},
-                    {"Required firmware", item_.min_fw.empty() || item_.min_fw == "?.??" ? "Unknown" : item_.min_fw},
+                    {"Required firmware", firmware_text(item_.min_fw).empty() ? "Unknown" : firmware_text(item_.min_fw)},
                     {"Title ID", item_.title_id},
                     {"Size", size_text(item_.size)},
                     {"Project", item_.metadata_source.empty() ? host_of(item_.url) : item_.metadata_source},
                     {"Package", store::package_path(item_)}};
         }
         for (const Row& r : rows) {
+            if (r.value.empty()) continue;
             gfx::draw_text(c, Face::Sans, kBodyPx, x, y, r.label, t.faint);
             gfx::draw_text(c, Face::Sans, kBodyPx, x + 290, y,
                            gfx::ellipsize(Face::Sans, kBodyPx, r.value, w - 290), t.text);
             y += 46;
+        }
+        // Trailers and screenshots, under the facts: the first trailer, then screenshots
+        // (more trailers when there are few). The buttons above show them all.
+        struct Thumb { std::string picture; bool trailer; };
+        std::vector<Thumb> thumbs;
+        if (!item_.trailers.empty()) thumbs.push_back({item_.trailers[0].poster, true});
+        for (const auto& shot : item_.screenshots) if (thumbs.size() < 6) thumbs.push_back({shot, false});
+        for (size_t i = 1; i < item_.trailers.size() && thumbs.size() < 6; ++i) thumbs.push_back({item_.trailers[i].poster, true});
+        if (!thumbs.empty()) {
+            y += 20;
+            const int gap = 16, tw = (w - 2 * gap) / 3, th = tw * 9 / 16;
+            for (size_t i = 0; i < thumbs.size(); ++i) {
+                const Rect r{x + (int)(i % 3) * (tw + gap), y + (int)(i / 3) * (th + gap), tw, th};
+                c.fill_rounded(r, 12, gfx::with_alpha(t.surface_hi, 200));
+                const gfx::Image* image = thumbs[i].picture.empty() ? nullptr :
+                    gfx::image_get(store::screenshot_source(thumbs[i].picture), tw, th, gfx::Fit::Cover);
+                if (image) c.draw_image_rounded(*image, r.x, r.y, 12);
+                if (thumbs[i].trailer) draw_play_symbol(c, r.x + tw / 2, r.y + th / 2, 34);
+            }
+            y += (int)((thumbs.size() + 2) / 3) * (th + gap) + 20;
         }
         c.pop_clip();
         max_scroll_ = std::max(0, y + scroll_ - kFooterTop + 32);
@@ -1031,7 +1331,7 @@ private:
         store::apply_game_metadata(item_, found.fields);
         scroll_ = 0;
         store::catalog()->update_game_metadata(item_.title_id, found.fields);
-        if (!automatic) app().toast("Game information saved from Wikidata.");
+        if (!automatic) app().toast("Game information saved from the PlayStation Store.");
     }
 
     void auto_metadata() {
@@ -1044,19 +1344,22 @@ private:
         metadata_busy_ = true;
         const Item item = item_;
         lib::async<store::MetadataResult>(metadata_token_, [item] { return store::auto_game_metadata(item); },
-            [this](store::MetadataResult& found) {
+            [this, key](store::MetadataResult& found) {
                 automatic_key_.clear();
+                // A miss for now (offline, the store busy): asked again next visit.
+                if (found.retry_later) metadata_attempts().erase(key);
                 accept_metadata(found, true);
             });
     }
 
     void find_metadata() {
         if (metadata_busy_) return;
-        open_keyboard("Find game information on Wikidata", store::game_metadata_query(item_.name), KeyboardKind::Text,
+        open_keyboard("Find this game on the PlayStation Store", store::game_metadata_query(item_.name), KeyboardKind::Text,
             [this](const std::string& query) {
                 if (lib::trim(query).empty()) return;
                 metadata_busy_ = true;
-                lib::async<store::MetadataSearch>(metadata_token_, [query] { return store::search_game_metadata(query); },
+                const Item item = item_;
+                lib::async<store::MetadataSearch>(metadata_token_, [item, query] { return store::search_game_metadata(item, query); },
                     [this](store::MetadataSearch& result) {
                         metadata_busy_ = false;
                         if (!result.problem.empty()) { app().toast(result.problem); return; }
@@ -1072,7 +1375,7 @@ private:
                                 });
                             }, nullptr});
                         }
-                        open_menu("Choose the matching game", std::move(matches), "Check the name and description before selecting. Dates retain their platform and region scope.");
+                        open_menu("Choose the matching game", std::move(matches), "Check the name, console and title ID before selecting.");
                     });
             });
     }
@@ -1159,6 +1462,14 @@ private:
             }
 
         }
+        if (!item.trailers.empty())
+            out.push_back({"Watch trailer", [item] {
+                               app().push(std::make_unique<TrailerScreen>(item.trailers[0], item.name));
+                           }});
+        if (!item.screenshots.empty())
+            out.push_back({"Screenshots (" + std::to_string(item.screenshots.size()) + ")", [item] {
+                               app().push(std::make_unique<GalleryScreen>(item, (int)item.trailers.size()));
+                           }});
         out.push_back({"Options", [this] { open_title_options(); }});
         // The game's own updates and add-ons, from the Updates and DLC lists
         // (packages made for this title: Sony's official updates do not install

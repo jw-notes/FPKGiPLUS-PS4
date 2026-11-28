@@ -32,6 +32,8 @@ public:
     virtual bool overlay() const { return false; }
     // Draws its own backdrop (the artwork of the focused title) instead of the plain one.
     virtual bool own_background() const { return false; }
+    // Fills the whole screen: no header or footer (pictures, a playing trailer).
+    virtual bool fullscreen() const { return false; }
     // The header tab this screen belongs to (an index into tab_names()), or -1.
     virtual int tab() const { return -1; }
     virtual std::vector<Hint> hints() const { return {}; }

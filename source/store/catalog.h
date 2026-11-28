@@ -36,6 +36,12 @@ struct Item {
     std::string release_date, description, developer, publisher, genres, players, languages, rating;
     std::string release_date_scope, metadata_source;
     std::string latest_release_date;
+    // From the PlayStation Store (store/metadata.h): screenshot JPEGs and
+    // trailers (HLS streams), each with the picture shown before it plays.
+    // url: the trailer's HLS stream (.m3u8), streamed when played.
+    struct Trailer { std::string url, poster; };
+    std::vector<std::string> screenshots;
+    std::vector<Trailer> trailers;
     std::string homebrew_category = "Other";
     uint64_t size = 0;
     Category category = Category::Games;

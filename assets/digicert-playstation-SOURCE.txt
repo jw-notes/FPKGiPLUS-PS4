@@ -1,0 +1,23 @@
+DigiCert public CA certificates (3 records) for the PlayStation Store.
+Downloaded unchanged from https://cacerts.digicert.com/<name>, concatenated
+(line endings normalised to LF) in this order:
+  GeoTrustTLSRSACAG1.crt.pem
+  DigiCertGlobalG2TLSRSASHA2562020CA1-1.crt.pem
+  DigiCertGlobalRootG2.crt.pem
+Retrieved: 2026-11-28
+PEM SHA-256 (whole file): 0ddb18822d8a9bf1816bde4694b1af582b65b97fe5f81498db40ae7693de33fe
+DER SHA-256 per certificate:
+  GeoTrust TLS RSA CA G1                      c06e307f7cfc1d32fa72a4c033c87b90019af216f0775d64978a2eca6c8a230e
+  DigiCert Global G2 TLS RSA SHA256 2020 CA1  c8025f9fc65fdfc95b3ca8cc7867b9a587b5277973957917463fc813d0b625a9
+  DigiCert Global Root G2                     cb3ccbb76031e5e0138f8dd39a23f9de47ffc35e43c1144cea27d46a5ab1cb5f
+Each verifies against the unchanged Mozilla bundle (cacert.pem); the root is
+the same certificate Mozilla ships. Expires: GeoTrust TLS RSA CA G1
+2027-11-02, Global G2 2020 CA1 2031-03-29, Global Root G2 2038-01-15 (UTC).
+Review/replace GeoTrust TLS RSA CA G1 before 2027-11-02.
+
+Why: the PlayStation Store's catalogue API (store.playstation.com), where
+FPKGi+ reads a game's screenshots, trailers and details, is issued by
+GeoTrust TLS RSA CA G1 under DigiCert Global Root G2. The console's TLS
+refuses that chain from the Mozilla roots alone ("certificate chain is not
+trusted", 0x8095f00c), as it did for Archive.org's GoDaddy chain; trusting
+the publisher's issuing CAs directly lets it complete the path.

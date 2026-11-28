@@ -20,6 +20,9 @@ std::string cover_source(const std::string& cover_url);
 // read out of the package at the title's URL (never from what is installed),
 // else its cover_url when that is on the web.
 std::string cover_source(const Item& item);
+// The image-cache source for a PlayStation Store screenshot or trailer
+// picture: downloaded once, kept at 1920 x 1080 in <data>/Screenshots.
+std::string screenshot_source(const std::string& url);
 // The cached file for a cover URL (for tests).
 std::string cover_cache_path(const std::string& cover_url);
 

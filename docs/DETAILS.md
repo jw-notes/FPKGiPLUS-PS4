@@ -108,11 +108,22 @@ If the download host's certificate cannot be verified on older firmware, the fil
 
 FPKGi+ never installs its own package. Every install path (local installs, installs from a link, and moving a PKG into GoldHEN's install folder) refuses a package whose title ID, or whose header content ID, is FPKGi+'s (`FPKP00001`). Close the app and install the update from **Debug Settings > Game > Package Installer**.
 
-## Game details
+## Game details, screenshots and trailers
 
-When a title is opened, missing details are looked up on Wikidata in the background. A match is only saved when exactly one entry matches the name and console platform; otherwise the existing details are kept. Use **Options > Find game info** to refine the search or pick a match yourself. Matches are saved in `wikidata-metadata.json` and work offline. Failed lookups are tried at most once per title per session. Homebrew is not looked up.
+When a title is opened, its details, screenshots and trailers are looked up on the PlayStation Store in the background:
 
-Release dates prefer a matching platform and region. Otherwise the date is labelled as the earliest listed release. Year-only and month-only dates stay that way. The content list's `release` field is shown separately as **Catalogue date**, because it often holds an upload date. Fields in `metadata.json` take priority over cached Wikidata fields.
+1. **By title ID**, in the store of the title's region first (EUR: the UK store, USA: the US store, JAP: Japan, ASIA: Hong Kong), then the others. Add-ons and themes listed under the same title ID are skipped unless their name matches.
+2. **By name**, when the title ID is not listed (a disc release's ID, or a product withdrawn from sale). The name must match. Only release words may differ, such as *Remastered*, *Edition*, *Definitive*, *Game of the Year*, *PS4* or a year, so *The Last of Us* finds *The Last of Us Remastered* but never *Part II*. A game sold as one PS4 and PS5 product and listed only for PS5 uses that listing.
+
+What is found is saved in `store-metadata.json` and works offline. Screenshots are downloaded once and kept at 1920×1080 in `Screenshots/`. Sony's picture and video servers are used over plain HTTP: they are public files, and this keeps the console's TLS out of it. Trailers are never saved. They stream (HLS, up to 720p) while you watch.
+
+If the store has nothing for a PS1, PS2 or PSP title, its in-game screenshot and title screen come from [libretro-thumbnails](https://github.com/libretro-thumbnails), matched by name and region. Its list of names is cached in `OpenMedia/` for 30 days. No other title is given pictures from anywhere else: a wrong picture is worse than none.
+
+A lookup that fails because the network or the store is unavailable is tried again the next time the title is opened. If the store refuses requests (HTTP 403 or 429), automatic lookups pause for 10 minutes. Use **Options > Find game info** to search the store yourself and pick the right game. Homebrew is not looked up. Fields in `metadata.json` take priority over the store's.
+
+### Trailers
+
+Trailers play with [MPV](https://mpv.io/) and [FFmpeg](https://ffmpeg.org/), decoding in software, as in [JellyFin \[PS\]](https://github.com/jw-notes/JellyFin-PS4). The console's own video player only opens a web address as a local file, so it cannot stream them. One player is kept for the session and each trailer is loaded into it. SDL2's audio driver (MPV's sound output) is started once and never shut down, because starting it a second time crashed the app.
 
 ## Archive.org sign-in
 
@@ -120,12 +131,13 @@ Release dates prefer a matching platform and region. Otherwise the date is label
 
 ## Secure connections
 
-Certificate and hostname checks are always on. At startup, FPKGi+ loads the Mozilla CA bundle shipped in the package (`assets/cacert.pem`, MPL 2.0) into the PS4 HTTP library. Older PS4 firmware cannot follow some cross-signed certificate chains, so two fixed compatibility files are also loaded:
+Certificate and hostname checks are always on. At startup, FPKGi+ loads the Mozilla CA bundle shipped in the package (`assets/cacert.pem`, MPL 2.0) into the PS4 HTTP library. Older PS4 firmware cannot follow some certificate chains, so three fixed compatibility files are also loaded:
 
 | File | Why | Expires |
 | --- | --- | --- |
 | `godaddy-secure-g2.pem` | Archive.org's GoDaddy G2 chain | 2031-05-03 |
 | `letsencrypt-gen-y.pem` | GitHub release downloads (Let's Encrypt ISRG Root YR / YR1) | Intermediates 2028-09-02 |
+| `digicert-playstation.pem` | The PlayStation Store's catalogue API (GeoTrust TLS RSA CA G1 under DigiCert Global Root G2) | GeoTrust G1 2027-11-02 |
 
 Each file is pinned by fingerprint and checked by `tools/check_tls_assets.py` at build time. Where each certificate came from and what it is trusted for is recorded in `licenses/*-SOURCE.txt` in the package. Certificates are never fetched or accepted at run time to recover from a TLS error. When a connection fails verification, the log records the SSL error, verification flags and console time.
 

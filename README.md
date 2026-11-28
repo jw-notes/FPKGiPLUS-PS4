@@ -5,7 +5,7 @@
 
   <p>
     <img alt="Platform" src="https://img.shields.io/badge/PS4-GoldHEN-003791">
-    <img alt="Version" src="https://img.shields.io/badge/version-01.03-2e7d32">
+    <img alt="Version" src="https://img.shields.io/badge/version-01.04-2e7d32">
     <img alt="Content lists" src="https://img.shields.io/badge/lists-FPKGi%20JSON-6a4bd8">
     <a href="LICENSE"><img alt="Licence" src="https://img.shields.io/badge/licence-GPLv3-blue"></a>
   </p>
@@ -32,7 +32,8 @@ FPKGi+ is a standalone package browser, downloader and installer for jailbroken 
 - **Blocks PlayStation Network updates for fake packages:** an official update, or a full re-download, from PlayStation Network does not run on a game installed as a fake package and stops it starting. FPKGi+ removes these from the console's download queue as they appear, in the background, with FPKGi+ closed and while you play. System software updates and games you own are left alone. See [Blocking PlayStation Network updates](#blocking-playstation-network-updates).
 - **Custom HTTP headers:** send cookies or tokens with content-list fetches and downloads, for servers that need sign-in. See [Custom HTTP headers](#custom-http-headers).
 - **Install and manage:** optionally install automatically after downloading and delete the PKG once the install is verified. You can also launch installed titles, delete installed games or apps, and delete downloaded PKGs.
-- **Game details:** descriptions, developer, publisher, genres, players and release dates, looked up automatically from [Wikidata](https://www.wikidata.org/) and cached for offline use.
+- **Screenshots and trailers:** each game's page shows its screenshots and trailers from the PlayStation Store. Browse the screenshots full screen, and stream trailers in the app with sound and a scrub bar. PS1, PS2 and PSP titles the store does not carry get their in-game screenshots from [libretro-thumbnails](https://github.com/libretro-thumbnails). See [Screenshots and trailers](#screenshots-and-trailers).
+- **Game details:** overview, publisher, release date, genre, players and age rating from the PlayStation Store, found by title ID in the right region's store and cached for offline use. Only the details that are known are shown.
 - **Homebrew updates:** installed homebrew linked to a GitHub release can be checked against the latest release. An update is only offered when the published PKG has the same title ID and a newer version.
 - **Archive.org sign-in:** download files that need an Archive.org account. Your password is never saved.
 - **Two themes:** Modern and Retro arcade.
@@ -86,6 +87,25 @@ When you launch a game installed as a fake package, the console can download an 
 - A notification names the game when an update is blocked.
 - It is on by default. **Settings > Pre-flight checks > Block PlayStation Network updates** turns it off.
 - To stop the console from queuing these at all, also turn off **Application Update Files** in **PS4 Settings > System > Automatic Downloads**.
+
+## Screenshots and trailers
+
+Open a game and its page shows the first trailer and screenshots under its details. **Watch trailer** plays the first trailer, and **Screenshots** opens them full screen.
+
+- **Lookup:** each title is looked up on the PlayStation Store by its title ID, in its region's store first. A disc release whose ID the store does not list is found by name, where only release words like *Remastered* or *Edition* may differ.
+- **Screenshots:** downloaded once and kept on the console.
+- **Trailers:** streamed while you watch, never saved, so they need an internet connection.
+- **When nothing is found:** PS1, PS2 and PSP titles fall back to [libretro-thumbnails](https://github.com/libretro-thumbnails). Any other title shows no pictures rather than another game's.
+- **Wrong match:** use **Options > Find game info** to pick the right game.
+
+While a trailer plays:
+
+| Button | Action |
+| --- | --- |
+| Cross | Pause or play |
+| Left / Right, tapped | Back or forward 10 seconds |
+| Left / Right, held | Scrub, faster the longer you hold; the trailer jumps there when you let go |
+| Circle | Back |
 
 ## Custom HTTP headers
 
@@ -171,6 +191,9 @@ You can also add or correct details without editing the list by creating `/data/
 | | Circle | Quit |
 | Title details | Options, or the gear button | Title options: find game info, delete the installed title, delete the downloaded PKG |
 | | Up / Down | Scroll the details |
+| Screenshots | Left / Right, or L1 / R1 | Previous / next picture; Cross plays a trailer |
+| Trailer | Cross | Pause or play |
+| | Left / Right | Tap: 10 seconds back / forward; hold: scrub |
 | Downloads | Cross | Pause or resume the selected download; install a finished one |
 | | Square | Stop (the partial file is kept), or delete the file |
 | | Triangle | Clear finished entries (their PKGs are kept) |
@@ -205,7 +228,9 @@ Everything is kept in `/data/FPKGiPlus/`:
 | `config.json` | Settings and content-source URLs |
 | `ContentJSONs/` | Local and cached content lists |
 | `metadata.json` | Your own title details (optional) |
-| `wikidata-metadata.json` | Cached game details |
+| `store-metadata.json` | Cached game details, screenshot and trailer links |
+| `Screenshots/` | Downloaded screenshots |
+| `OpenMedia/` | libretro-thumbnails name lists (PS1, PS2, PSP) |
 | `download-queue.json` | The saved download queue |
 | `service/` | The background downloader's progress and the app's requests to it |
 | `service.log`, `service.prev.log` | The background downloader's logs |
@@ -217,6 +242,8 @@ If you report a problem, please attach `fpkgi-plus.log` and `service.log` (and `
 ## Building from source
 
 You need Linux or WSL with `clang-18`, `lld-18`, `python3`, `openssl` and the [OpenOrbis PS4 toolchain](https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain). Put the toolchain in `tools/toolchain/OpenOrbis/PS4Toolchain`, or pass its location with `make TOOLCHAIN=/path/to/toolchain`. If `lld` is not at `tools/toolchain/llvm-local/usr/lib/llvm-18/bin/lld`, pass it too, for example `make LLD=/usr/bin/ld.lld-18`. `tools/build.sh` reads the same variables from the environment.
+
+The trailer player needs the PS4 builds of MPV, FFmpeg and SDL2 from [PacBrew](https://github.com/PacBrew) (the `ps4-portlibs` and `pacbrew-base` packages, and an OpenOrbis toolchain with the `ScePigletv2VSH` and `SceSysUtil` stubs), laid out as in [JellyFin \[PS\]](https://github.com/jw-notes/JellyFin-PS4)'s `tools/` folder. Put them in `tools/mpv/` or a `JellyFin-PS4` folder next to this one, or pass `make MPV_TOOLS=/path`.
 
 ```sh
 make host           # desktop build for development
@@ -237,7 +264,8 @@ FPKGi+ is free software under the [GNU GPL v3](LICENSE), with additional attribu
 - Based on [Librarian](https://github.com/jw-notes/Librarian) by jw-notes.
 - Inspired by [PKGi](https://github.com/bucanero/pkgi-ps3) by bucanero, the original package installer. Supports FPKGi's content-list format, and contains no PKGi or FPKGi code.
 - Credential helper adapted from [Itemzflow](https://github.com/LightningMods/Itemzflow) by LM, Sleirsgoevy and Specter (GPL v3).
-- Game details from [Wikidata](https://www.wikidata.org/) (CC0).
+- Game details, screenshots and trailers from the PlayStation Store. PS1, PS2 and PSP screenshots from [libretro-thumbnails](https://github.com/libretro-thumbnails).
+- Trailers play with [MPV](https://mpv.io/) and [FFmpeg](https://ffmpeg.org/) (the PS4 builds from [PacBrew](https://github.com/PacBrew)), following the player in [JellyFin \[PS\]](https://github.com/jw-notes/JellyFin-PS4) by jw-notes.
 - Third-party libraries, fonts and certificates are listed in [NOTICE](NOTICE); their licences ship in the package's `licenses/` folder.
 
 FPKGi+ is not affiliated with or endorsed by Sony Interactive Entertainment. No games or PKGs are included or distributed with this app; the built-in Homebrew list only links to each project's own GitHub releases.

@@ -4,6 +4,16 @@
      sce_sys/changeinfo/changeinfo.xml, keeping only the versions up to the
      one being built (version.json), so a note can be written before its release. -->
 <changeinfo>
+  <changes app_ver="01.04">
+    <![CDATA[
+This version contains the following changes:
+- Screenshots and trailers on each game's page, from the PlayStation Store. Browse the screenshots full screen, and stream trailers in the app with sound
+- Trailer controls: Cross pauses, tap Left or Right to skip 10 seconds, hold to scrub with the bar
+- Game details (overview, publisher, release date, genre, players, age rating) now come from the PlayStation Store, found by title ID in your region's store. Only details that are known are shown
+- PS1, PS2 and PSP titles the store does not carry get their in-game screenshots from libretro-thumbnails
+- Required firmware is shown as, for example, 9.00+
+    ]]>
+  </changes>
   <changes app_ver="01.03">
     <![CDATA[
 This version contains the following changes:

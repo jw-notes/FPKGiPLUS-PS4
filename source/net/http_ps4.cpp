@@ -96,6 +96,9 @@ std::vector<std::string> header_values(const char* headers, size_t size, const c
 
 }  // namespace
 
+// The network memory pool, for the video player's name lookups (platform/movie_mpv_ps4.cpp).
+int net_pool_id() { return g_pool; }
+
 bool http_init() {
     sceSysmoduleLoadModuleInternal(ORBIS_SYSMODULE_INTERNAL_NET);
     sceSysmoduleLoadModuleInternal(ORBIS_SYSMODULE_INTERNAL_NETCTL);
@@ -131,6 +134,15 @@ bool http_init() {
             const auto extra = split_ca_certificates(compatibility);
             if (extra.size() == 8) g_ca_pem.insert(g_ca_pem.begin(), extra.begin(), extra.end());
             else LOG("TLS: letsencrypt-gen-y.pem has %zu certificates, expected 8; not loaded", extra.size());
+        }
+        // The PlayStation Store's API (screenshots, trailers, game details):
+        // GeoTrust TLS RSA CA G1 under DigiCert Global Root G2, which the
+        // firmware does not complete from the Mozilla roots (0x8095f00c).
+        // Trust the publisher's issuing CAs directly, as above.
+        if (read_file(join_path(platform::assets_root(), "digicert-playstation.pem"), compatibility, 16 * 1024)) {
+            const auto extra = split_ca_certificates(compatibility);
+            if (extra.size() == 3) g_ca_pem.insert(g_ca_pem.begin(), extra.begin(), extra.end());
+            else LOG("TLS: digicert-playstation.pem has %zu certificates, expected 3; not loaded", extra.size());
         }
         g_ca_records.reserve(g_ca_pem.size());
         g_ca_list.reserve(g_ca_pem.size());

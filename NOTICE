@@ -28,6 +28,11 @@ Let's Encrypt (ISRG) Generation Y public root and intermediate certificates,
 reproduced unchanged from https://letsencrypt.org/certificates/.
 Provenance, fingerprints and compatibility trust scope:
 licenses/letsencrypt-gen-y-SOURCE.txt (assets/letsencrypt-gen-y.pem).
+DigiCert public issuing and root certificates (GeoTrust TLS RSA CA G1,
+DigiCert Global G2 TLS RSA SHA256 2020 CA1, DigiCert Global Root G2),
+reproduced unchanged from https://cacerts.digicert.com/.
+Provenance, fingerprints and compatibility trust scope:
+licenses/digicert-playstation-SOURCE.txt (assets/digicert-playstation.pem).
 Itemzflow libjbc credential helper (LM, Sleirsgoevy, Specter), from
 https://github.com/LightningMods/Itemzflow, GPL-3.0. Adaptations: unsupported
 kernel-call detection, complete variadic arguments, bounded process walks,
@@ -44,3 +49,19 @@ GoldHEN Plugins SDK (GoldHEN team)                        licenses/goldhen_sdk-L
 Noto Sans, Noto Serif, Noto Sans Mono, Noto Sans JP        SIL Open Font License 1.1 (assets/fonts/OFL.txt)
 Press Start 2P (The Press Start 2P Project Authors)        SIL Open Font License 1.1 (assets/fonts/OFL-PressStart2P.txt)
 OpenOrbis PS4 toolchain runtime (libc.prx, right.sprx)    GPL-3.0 (OpenOrbis)
+
+The trailer player, linked into the app (not the background downloader):
+the PS4 builds from PacBrew (https://github.com/PacBrew), as used by
+JellyFin [PS] for PS4 by jw-notes. Each under its own licence; names,
+licences and sources: licenses/media-libraries.txt.
+MPV                                                       GPL-2.0-or-later
+FFmpeg                                                    GPL / LGPL
+SDL2                                                      zlib
+mbedTLS                                                   Apache-2.0
+dav1d                                                     BSD-2-Clause
+libass                                                    ISC
+FreeType                                                  FreeType License (FTL)
+FriBidi                                                   LGPL-2.1-or-later
+libpng                                                    libpng License
+libsamplerate                                             BSD-2-Clause
+zlib, bzip2                                               zlib / bzip2 licence

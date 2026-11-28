@@ -178,6 +178,19 @@ void apply_metadata(Item& item, const lib::Json& v) {
     if (v.has("players")) item.players = text_of(v["players"]);
     if (v.has("languages")) item.languages = text_of(v["languages"]);
     if (v.has("rating")) item.rating = text_of(v["rating"]);
+    if (v.has("screenshots")) {
+        item.screenshots.clear();
+        for (const auto& shot : v["screenshots"].items())
+            if (lib::starts_with(shot.str(), "https://") || lib::starts_with(shot.str(), "http://")) item.screenshots.push_back(shot.str());
+    }
+    if (v.has("trailers")) {
+        item.trailers.clear();
+        for (const auto& trailer : v["trailers"].items()) {
+            const std::string url = trailer.is_object() ? trailer["url"].str() : trailer.str();
+            if (lib::starts_with(url, "https://") || lib::starts_with(url, "http://"))
+                item.trailers.push_back({url, trailer.is_object() ? trailer["poster"].str() : ""});
+        }
+    }
 }
 
 const char* category_name(Category c) { return kCategories[(int)c].name; }
@@ -625,11 +638,19 @@ void Catalog::load() {
         }
     }
     std::string automatic;
-    if (lib::read_file(lib::join_path(platform::data_root(), "wikidata-metadata.json"), automatic)) {
+    if (lib::read_file(lib::join_path(platform::data_root(), "store-metadata.json"), automatic)) {
         bool ok = false;
         const auto root = lib::Json::parse(automatic, &ok);
-        if (ok && root.is_object()) for (auto& category : items_) for (auto& item : category)
-            apply_metadata(item, root[item.title_id]);
+        // Pictures an earlier test build took from Wikimedia Commons were too
+        // often not the game's own: those entries are not used.
+        if (ok && root.is_object()) for (auto& category : items_) for (auto& item : category) {
+            const lib::Json& saved = root[item.title_id];
+            const std::string source = saved["metadata_source"].str();
+            // Store entries from before trailers were HLS streams are looked
+            // up again (once) rather than used.
+            const bool old_store = lib::starts_with(source, "https://store.playstation.com/") && saved["format"].integer() < 3;
+            if (!lib::starts_with(source, "https://www.wikidata.org/") && !old_store) apply_metadata(item, saved);
+        }
     }
     std::string metadata;
     if (lib::read_file(lib::join_path(platform::data_root(), "metadata.json"), metadata)) {

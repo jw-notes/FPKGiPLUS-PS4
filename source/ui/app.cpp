@@ -87,12 +87,14 @@ void App::draw() {
     Screen* base = stack_[first].get();
     if (!base->own_background()) draw_background(c);
     base->draw(c);
-    draw_header(c, base->tab());
-    if (first == stack_.size() - 1) draw_footer(c, base->hints());
+    if (!base->fullscreen()) {
+        draw_header(c, base->tab());
+        if (first == stack_.size() - 1) draw_footer(c, base->hints());
+    }
     for (size_t i = first + 1; i < stack_.size(); ++i) stack_[i]->draw(c);
     if (stack_.size() - 1 > first) draw_footer(c, stack_.back()->hints());
 
-    if (arcade()) {
+    if (arcade() && !base->fullscreen()) {
         // Scanlines: every fourth line a little darker, like a tube screen.
         const gfx::Color dark = gfx::with_alpha(gfx::rgb(0x000000), 105);
         for (int y = 0; y < kHeight; y += 3) c.fill({0, y, kWidth, 1}, dark);

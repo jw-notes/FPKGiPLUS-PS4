@@ -32,6 +32,11 @@ constexpr int kCachedSize = 512;
 
 std::string covers_dir() { return lib::join_path(platform::data_root(), "Covers"); }
 
+constexpr const char* kShotPrefix = "shot:";
+// Store screenshots are up to 4K (several MB each): kept at the screen's size.
+constexpr int kShotWidth = 1920, kShotHeight = 1080;
+std::string shots_dir() { return lib::join_path(platform::data_root(), "Screenshots"); }
+
 uint64_t fnv1a(const std::string& s) {
     uint64_t h = 1469598103934665603ull;
     for (unsigned char c : s) h = (h ^ c) * 1099511628211ull;
@@ -116,7 +121,37 @@ bool load(const std::string& source, std::string& bytes) {
     return true;
 }
 
+bool load_shot(const std::string& source, std::string& bytes) {
+    const std::string url = source.substr(strlen(kShotPrefix));
+    char name[32];
+    snprintf(name, sizeof name, "%016llx.jpg", (unsigned long long)fnv1a(url));
+    const std::string cached = lib::join_path(shots_dir(), name);
+    if (lib::read_file(cached, bytes, 16 * 1024 * 1024) && !bytes.empty()) return true;
+    // The store's pictures are 4K (up to about 13 MB); its image service
+    // sends the same picture as a JPEG at the screen's width (about 300 KB).
+    // (Plain HTTP, like the pictures themselves: see store/metadata.cpp.)
+    std::string path;
+    for (const char* vulcan : {"http://vulcan.dl.playstation.net/", "https://vulcan.dl.playstation.net/"})
+        if (lib::starts_with(url, vulcan)) path = url.substr(strlen(vulcan));
+    const bool resized = !path.empty() &&
+        fetch("http://image.api.playstation.com/vulcan/" + path + "?w=" + std::to_string(kShotWidth), bytes);
+    if (!resized && !fetch(url, bytes)) return false;
+    gfx::Image image;
+    // decode_image takes a 4K picture one at a time by itself.
+    if (gfx::decode_image(bytes, image, kShotWidth, kShotHeight)) {
+        std::string jpeg;
+        if (gfx::encode_jpeg(image, 85, jpeg)) {
+            lib::make_dirs(shots_dir());
+            lib::write_file_atomic(cached, jpeg);
+            bytes = std::move(jpeg);
+        }
+    }
+    return true;
+}
+
 }  // namespace
+
+std::string screenshot_source(const std::string& url) { return url.empty() ? "" : kShotPrefix + url; }
 
 std::string cover_cache_path(const std::string& cover_url) {
     char name[32];
@@ -127,6 +162,7 @@ std::string cover_cache_path(const std::string& cover_url) {
 void covers_init() {
     lib::make_dirs(covers_dir());
     gfx::image_register_prefix_loader(kPrefix, load);
+    gfx::image_register_prefix_loader(kShotPrefix, load_shot);
 }
 
 std::string cover_source(const std::string& cover_url) { return cover_url.empty() ? "" : kPrefix + cover_url; }
