@@ -111,7 +111,7 @@ InstallResult delete_app(const Item& item) {
     return r;
 }
 
-std::vector<std::string> update_blocker_tick(bool) { return {}; }
+std::vector<std::string> update_blocker_tick(bool, bool) { return {}; }
 bool service_blocker_active() { return false; }
 
 }  // namespace store

@@ -5,7 +5,7 @@
 
   <p>
     <img alt="Platform" src="https://img.shields.io/badge/PS4-GoldHEN-003791">
-    <img alt="Version" src="https://img.shields.io/badge/version-01.04-2e7d32">
+    <img alt="Version" src="https://img.shields.io/badge/version-01.05-2e7d32">
     <img alt="Content lists" src="https://img.shields.io/badge/lists-FPKGi%20JSON-6a4bd8">
     <a href="LICENSE"><img alt="Licence" src="https://img.shields.io/badge/licence-GPLv3-blue"></a>
   </p>
@@ -85,6 +85,8 @@ When you launch a game installed as a fake package, the console can download an 
 - It works in the background downloader, so it blocks with FPKGi+ closed and while you play. When the background downloader is not available, FPKGi+ blocks only while it is open.
 - Only downloads from PlayStation Network **for a title installed as a fake package** are removed. System software updates (`PS4UPDATE.PUP`), your own installs, and games you own on disc or from the Store are never touched.
 - A notification names the game when an update is blocked.
+- It pauses in rest mode and for a minute after the console wakes, so an update queued in rest mode is removed once you are back. To keep the console from downloading them in rest mode, turn off **Application Update Files** (below).
+- If the console ever stops while the blocker is reading the queue (a freeze or a power cut), the next start logs it. After a second such stop, the background downloader stops blocking for good. To allow it again, delete `service/blocker-stops` and `service/blocker-auth.state` from the data folder.
 - It is on by default. **Settings > Pre-flight checks > Block PlayStation Network updates** turns it off.
 - To stop the console from queuing these at all, also turn off **Application Update Files** in **PS4 Settings > System > Automatic Downloads**.
 

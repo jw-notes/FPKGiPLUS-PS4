@@ -793,8 +793,9 @@ public:
         }
         scrub(in, now);
         if (in.press(kOptions) || in.press(kUp) || in.press(kDown)) show_controls();
-        // The end (or the stream failing once it had started).
-        if (playing_ && !paused_ && !holding_ && !platform::movie_active()) { app().pop(); return; }
+        // The end, the stream failing once it had started, or the player torn
+        // down while the app was on the home screen (even when paused).
+        if (playing_ && !holding_ && !platform::movie_active()) { app().pop(); return; }
         // Failed before a picture came: say so.
         if (!playing_ && opened_ && problem_.empty() && !platform::movie_active()) {
             problem_ = platform::movie_problem();

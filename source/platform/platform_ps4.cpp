@@ -297,8 +297,14 @@ void follow_focus(uint64_t now) {
         if (erc < 0) break;
     }
     const bool away = status.ui_overlaid || status.in_background;
-    if (first || away != was_away)
+    if (first || away != was_away) {
         LOG("focus: system UI over the app %d, in background %d", status.ui_overlaid, status.in_background);
+        // Away (the home screen, where the app may be closed): each log line
+        // goes to disk at once, so a close that hangs still shows how far it
+        // got; and a playing trailer's player is torn down.
+        lib::log_set_sync(away);
+        if (away && status.in_background) movie_close();
+    }
     if (was_away && !away && g_pad >= 0) {
         scePadClose(g_pad);
         int user = 0;

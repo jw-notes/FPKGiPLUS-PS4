@@ -4,6 +4,15 @@
      sce_sys/changeinfo/changeinfo.xml, keeping only the versions up to the
      one being built (version.json), so a note can be written before its release. -->
 <changeinfo>
+  <changes app_ver="01.05">
+    <![CDATA[
+This version contains the following changes:
+- Fixed the console hanging when FPKGi+ was closed from the home screen after watching trailers
+- Game pages no longer slow down after a trailer: the video player is closed when you leave a trailer or go to the home screen
+- The update blocker pauses while the console goes into rest mode and for a minute after it wakes
+- If the console ever stops while the update blocker is reading the download queue, the next start notes it; after a second time, the background blocker switches itself off
+    ]]>
+  </changes>
   <changes app_ver="01.04">
     <![CDATA[
 This version contains the following changes:

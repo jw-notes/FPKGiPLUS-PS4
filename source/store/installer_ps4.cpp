@@ -9,7 +9,9 @@
 // still browses and downloads; only installing is unavailable.
 #include <stdlib.h>
 #include <string.h>
+#include <fcntl.h>
 #include <time.h>
+#include <unistd.h>
 #include <algorithm>
 
 #include <orbis/Sysmodule.h>
@@ -518,6 +520,61 @@ bool bgft_queue_usable(int bgft, OrbisBgftInitParams* params, std::string& probl
     return true;
 }
 
+// ---- the borrow marker ----
+// <data>/service/blocker-borrow.mark says "borrowing <time>" while the service
+// holds borrowed access and "idle <time>" otherwise, written in place and
+// flushed to disk each time (not renamed: a rename can be lost in a power cut,
+// so a stale "borrowing" would come back). Found as "borrowing" at start, the
+// console stopped (froze or lost power) while the service held access: that is
+// logged, counted in blocker-stops, and after kStopsBeforeOff such stops the
+// borrow is switched off for good (the latch is set to "failed").
+constexpr int kStopsBeforeOff = 2;
+
+void write_mark(const char* state) {
+    const std::string path = blocker_file("blocker-borrow.mark");
+    const int fd = open(path.c_str(), O_WRONLY | O_CREAT, 0666);
+    if (fd < 0) return;
+    char text[48];
+    const int n = snprintf(text, sizeof text, "%-9s %lld\n", state, (long long)time(nullptr));  // fixed length
+    if (pwrite(fd, text, n, 0) == n) fsync(fd);
+    close(fd);
+}
+
+// True when borrowing may go on; false when earlier stops switched it off.
+bool check_previous_stop() {
+    static int verdict = -1;
+    if (verdict >= 0) return verdict == 1;
+    verdict = 1;
+    std::string mark;
+    if (!lib::read_file(blocker_file("blocker-borrow.mark"), mark, 64) || !lib::starts_with(mark, "borrowing")) return true;
+    std::string text;
+    lib::read_file(blocker_file("blocker-stops"), text, 32);
+    const int stops = atoi(text.c_str()) + 1;
+    lib::write_file_atomic(blocker_file("blocker-stops"), std::to_string(stops) + "\n");
+    write_mark("idle");
+    LOG("update blocker (service): the console stopped while this service held borrowed access (%s); stop %d of %d",
+        lib::trim(mark).c_str(), stops, kStopsBeforeOff);
+    if (stops >= kStopsBeforeOff) {
+        lib::write_file_atomic(blocker_file("blocker-auth.state"), "failed\n");
+        LOG("update blocker (service): borrowing switched off (delete service/blocker-stops and "
+            "service/blocker-auth.state to allow it again)");
+        verdict = 0;
+    }
+    return verdict == 1;
+}
+
+bool borrow_marked() {
+    write_mark("borrowing");
+    if (platform::sandbox::borrow_authority()) return true;
+    write_mark("idle");
+    return false;
+}
+
+void restore_marked() {
+    platform::sandbox::restore_authority();
+    write_mark("idle");
+}
+
 // The background service's own start of the download service: only what the
 // blocker uses (reading the queue, stopping and removing a task).
 //
@@ -570,19 +627,19 @@ bool blocker_service_init(std::string& problem) {
         return false;
     }
     if (mark == "failed") {
-        failed = problem = "borrowing background access did not help on this console (not retrying)";
+        failed = problem = "borrowing background access is switched off on this console (not retrying)";
         return false;
     }
     LOG("update blocker (service): queue refused sandboxed; trying a one-shot authority borrow");
     lib::write_file_atomic(latch, "attempting\n");  // flushed before the risky step
-    if (!platform::sandbox::borrow_authority()) {
+    if (!borrow_marked()) {
         lib::write_file_atomic(latch, "ready\n");  // no privilege change happened; retryable
         failed = problem = "the background service cannot borrow authority on this console";
         LOG("update blocker (service): %s", problem.c_str());
         return false;
     }
     const bool usable = bgft_queue_usable(bgft, &params, problem);
-    platform::sandbox::restore_authority();
+    restore_marked();
     if (usable) {
         // Keep the latch at "attempting" until the survival watchdog promotes
         // it (update_blocker_tick): a quick freeze after this must not retry.
@@ -613,7 +670,7 @@ bool service_blocker_active() {
     return json["state"].str() == "watching" && age >= 0 && age <= kBlockerStatusFreshSeconds;
 }
 
-std::vector<std::string> update_blocker_tick(bool from_service) {
+std::vector<std::string> update_blocker_tick(bool from_service, bool settled) {
     std::vector<std::string> out;
     const bool enabled = catalog()->config().block_sony_updates;
 
@@ -667,6 +724,21 @@ std::vector<std::string> update_blocker_tick(bool from_service) {
     static uint64_t status_written = 0;
     static const char* last_state = "";
     if (from_service) {
+        // Not while the console goes into rest mode or has just woken: no
+        // borrow, no status (the app watches the queue itself if it is open).
+        static bool was_settled = true;
+        if (settled != was_settled) {
+            LOG("update blocker (service): %s", settled ? "console settled; watching again" : "paused (rest mode or just woken)");
+            was_settled = settled;
+        }
+        if (!settled) return out;
+        if (!check_previous_stop()) {
+            if (strcmp(last_state, "unavailable") != 0) {
+                last_state = "unavailable";
+                write_blocker_status(last_state);
+            }
+            return out;
+        }
         std::string problem;
         const bool watching = blocker_service_init(problem);
         const char* state = !enabled ? "off" : watching ? "watching" : "unavailable";
@@ -746,8 +818,8 @@ std::vector<std::string> update_blocker_tick(bool from_service) {
     // just this scan and hands it straight back. The app is already privileged.
     struct ServiceAccess {
         bool held = false;
-        explicit ServiceAccess(bool on) { if (on) held = platform::sandbox::borrow_authority(); }
-        ~ServiceAccess() { if (held) platform::sandbox::restore_authority(); }
+        explicit ServiceAccess(bool on) { if (on) held = borrow_marked(); }
+        ~ServiceAccess() { if (held) restore_marked(); }
     } access(from_service);
     if (from_service && !access.held) return out;  // could not borrow this pass
 

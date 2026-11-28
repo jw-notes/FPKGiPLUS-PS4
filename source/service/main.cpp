@@ -206,7 +206,12 @@ int main() {
         queue.service_apply_commands();
         watch_screen(watch);
         announce_changes(watch);
-        for (const std::string& message : store::update_blocker_tick(true)) notify(watch, message);
+        // The blocker borrows system access only while the console is settled:
+        // not going into rest mode (no user on screen) and not just woken. Both
+        // hard freezes so far (2026-11-28) came while the console's shell was
+        // busy with something else and the service kept borrowing.
+        const bool settled = watch.user_on_screen && time(nullptr) >= watch.quiet_until;
+        for (const std::string& message : store::update_blocker_tick(true, settled)) notify(watch, message);
         // Settings changed in the app (connections, destination): read again.
         const uint64_t now = platform::now_ms();
         if (now - settings_checked >= 5000) {

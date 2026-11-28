@@ -123,7 +123,7 @@ A lookup that fails because the network or the store is unavailable is tried aga
 
 ### Trailers
 
-Trailers play with [MPV](https://mpv.io/) and [FFmpeg](https://ffmpeg.org/), decoding in software, as in [JellyFin \[PS\]](https://github.com/jw-notes/JellyFin-PS4). The console's own video player only opens a web address as a local file, so it cannot stream them. One player is kept for the session and each trailer is loaded into it. SDL2's audio driver (MPV's sound output) is started once and never shut down, because starting it a second time crashed the app.
+Trailers play with [MPV](https://mpv.io/) and [FFmpeg](https://ffmpeg.org/), decoding in software, as in [JellyFin \[PS\]](https://github.com/jw-notes/JellyFin-PS4). The console's own video player only opens a web address as a local file, so it cannot stream them. A player is made for each trailer and closed when you leave it or go to the home screen, so nothing of it stays in the app between trailers. SDL2's audio driver (MPV's sound output) is started once and never shut down, because starting it a second time crashed the app.
 
 ## Archive.org sign-in
 

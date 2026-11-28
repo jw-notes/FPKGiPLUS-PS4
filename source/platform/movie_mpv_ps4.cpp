@@ -13,9 +13,11 @@
 // the newest onto the frame. Sound goes out through SDL2's PS4 audio, which
 // opens a port of its own beside the app's.
 //
-// One player for the whole session: made for the first trailer, each later one
-// loaded into it (loadfile replace) and stopped when left. Making a second
-// player after the first was torn down crashed the app as its sound started.
+// A player is made for each trailer and torn down when it is left, as JellyFin
+// [PS] does: nothing of it stays in the app between trailers (01.04 kept one
+// player for the session; the console then hung once while closing the app).
+// Making a second player used to crash as its sound started: that was SDL's
+// audio driver being restarted, which the wraps below prevent.
 #include "platform/platform.h"
 
 #include <mpv/client.h>
@@ -239,6 +241,8 @@ void events() {
 }
 
 void destroy() {
+    if (!g_player && !g_renderer) return;
+    const uint64_t began = platform::now_ms();
     // The render thread first: nothing may render while the context goes away.
     if (g_renderer) mpv_render_context_set_update_callback(g_renderer, nullptr, nullptr);
     if (g_render_running) {
@@ -254,10 +258,33 @@ void destroy() {
         f.px = nullptr;
     }
     g_newest = g_reading = -1;
-    if (g_renderer) mpv_render_context_free(g_renderer);
-    if (g_player) mpv_terminate_destroy(g_player);
+    // MPV itself goes on a thread of its own: tearing it down waits on its
+    // network reads. Up to 3 s here, then it finishes alone (as in JellyFin).
+    struct Teardown {
+        mpv_render_context* renderer;
+        mpv_handle* player;
+        std::shared_ptr<std::atomic<bool>> done;
+    };
+    auto done = std::make_shared<std::atomic<bool>>(false);
+    auto* job = new Teardown{g_renderer, g_player, done};
     g_renderer = nullptr;
     g_player = nullptr;
+    auto run = [](void* p) -> void* {
+        auto* t = (Teardown*)p;
+        if (t->renderer) mpv_render_context_free(t->renderer);
+        if (t->player) mpv_terminate_destroy(t->player);
+        *t->done = true;
+        delete t;
+        return nullptr;
+    };
+    pthread_t thread;
+    if (pthread_create(&thread, nullptr, run, job) != 0) {
+        run(job);
+    } else {
+        pthread_detach(thread);
+        while (!*done && platform::now_ms() - began < 3000) usleep(5000);
+    }
+    LOG("movie: player closed%s (%llu ms)", *done ? "" : ", still finishing", (unsigned long long)(platform::now_ms() - began));
 }
 
 // Where each system module sits, once: a crash's address (crash.log) then
@@ -438,15 +465,11 @@ uint64_t movie_duration_ms() {
 }
 
 void movie_close() {
-    // Stopped, not torn down: the player is kept for the next trailer.
-    if (!g_player) return;
-    const char* command[] = {"stop", nullptr};
-    mpv_command(g_player, command);
-    pthread_mutex_lock(&g_frame_lock);
-    g_newest = -1;
-    pthread_mutex_unlock(&g_frame_lock);
+    // Torn down: nothing of the player stays in the app between trailers.
     g_ended = true;
     g_got_video = g_loaded = false;
+    g_awaiting_start = false;
+    destroy();
 }
 
 }  // namespace platform

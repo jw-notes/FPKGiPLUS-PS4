@@ -148,7 +148,9 @@ bool is_sony_source(const std::string& value);
 // fPKGs up to date for it (<data>/service/fpkg-titles.json) and watches the
 // queue itself when the service does not (service_blocker_active).
 // FPKGIPLUS.blockSonyUpdates (Settings > Pre-flight checks) turns both off.
-std::vector<std::string> update_blocker_tick(bool from_service = false);
+// The service passes `settled` false while no user is on screen (going into
+// rest mode) and for a while after waking: it borrows no access then.
+std::vector<std::string> update_blocker_tick(bool from_service = false, bool settled = true);
 // True while the background service reports that it is watching the queue.
 bool service_blocker_active();
 // Re-reads the folders above (after an install, or when the app is resumed).
