@@ -5,7 +5,7 @@
 
   <p>
     <img alt="Platform" src="https://img.shields.io/badge/PS4-GoldHEN-003791">
-    <img alt="Version" src="https://img.shields.io/badge/version-01.00-2e7d32">
+    <img alt="Version" src="https://img.shields.io/badge/version-01.03-2e7d32">
     <img alt="Content lists" src="https://img.shields.io/badge/lists-FPKGi%20JSON-6a4bd8">
     <a href="LICENSE"><img alt="Licence" src="https://img.shields.io/badge/licence-GPLv3-blue"></a>
   </p>
@@ -25,9 +25,12 @@ FPKGi+ is a standalone package browser, downloader and installer for jailbroken 
 ## Features
 
 - **Catalogue tabs:** Games, Updates, DLC, Apps, Homebrew, Emulators, Themes, Demos, PS1, PS2 and PSP. A tab only appears when its content list has entries. PS1, PS2 and PSP titles are shown in their own platform's case.
+- **Installed tab:** every game and app from your content lists that is installed on the console, in one place, with a **Show** filter (All, Games, Homebrew and so on) in Sort & filter.
 - **Built-in Homebrew list:** 17 open-source apps, games and emulators (Apollo Save Tool, RetroArch, DolphinPS4, Librarian and more), ready to download and keep updated. Tabs show cover art, region, version, size and required firmware, and installed titles get a tick.
 - **Downloads:** resumable downloads with up to 8 connections each. Choose the console or a USB drive as the destination. The queue survives closing the app, and the free space is checked before each download starts.
 - **Background downloads:** downloads keep going after FPKGi+ is closed and while you play other games; in rest mode they pause and continue when the console wakes. A notification appears when a download finishes or fails, wherever you are on the console. See [Background downloads](#background-downloads).
+- **Blocks PlayStation Network updates for fake packages:** an official update, or a full re-download, from PlayStation Network does not run on a game installed as a fake package and stops it starting. FPKGi+ removes these from the console's download queue as they appear, in the background, with FPKGi+ closed and while you play. System software updates and games you own are left alone. See [Blocking PlayStation Network updates](#blocking-playstation-network-updates).
+- **Custom HTTP headers:** send cookies or tokens with content-list fetches and downloads, for servers that need sign-in. See [Custom HTTP headers](#custom-http-headers).
 - **Install and manage:** optionally install automatically after downloading and delete the PKG once the install is verified. You can also launch installed titles, delete installed games or apps, and delete downloaded PKGs.
 - **Game details:** descriptions, developer, publisher, genres, players and release dates, looked up automatically from [Wikidata](https://www.wikidata.org/) and cached for offline use.
 - **Homebrew updates:** installed homebrew linked to a GitHub release can be checked against the latest release. An update is only offered when the published PKG has the same title ID and a newer version.
@@ -73,6 +76,37 @@ From version 1.01, downloads run in a small background service, the **FPKGi+ bac
 - Finished downloads are installed by FPKGi+: straight away if it is open and **Install after downloading** is on, otherwise the next time it opens. They are already in `/data/pkg/`, so you can also install them from GoldHEN's Package Installer.
 - The background downloader needs FPKGi+ to leave its sandbox (GoldHEN). When that is not possible, or if it cannot be installed or started, FPKGi+ downloads inside the app as in version 1.00.
 - **Settings > System > Background downloads** turns it off (from the next time FPKGi+ opens), and **Background downloader > Remove** stops it and deletes it from the system partition.
+
+## Blocking PlayStation Network updates
+
+When you launch a game installed as a fake package, the console can download an official update for it from PlayStation Network — or re-download the whole retail game. Neither runs without the licence a fake package does not have, so the game stops starting. From version 1.03, FPKGi+ watches the console's download queue and removes these as they appear.
+
+- It works in the background downloader, so it blocks with FPKGi+ closed and while you play. When the background downloader is not available, FPKGi+ blocks only while it is open.
+- Only downloads from PlayStation Network **for a title installed as a fake package** are removed. System software updates (`PS4UPDATE.PUP`), your own installs, and games you own on disc or from the Store are never touched.
+- A notification names the game when an update is blocked.
+- It is on by default. **Settings > Pre-flight checks > Block PlayStation Network updates** turns it off.
+- To stop the console from queuing these at all, also turn off **Application Update Files** in **PS4 Settings > System > Automatic Downloads**.
+
+## Custom HTTP headers
+
+If a content-list server or download host needs a cookie or token, add HTTP headers in `config.json` under `PREFERENCES`. They are sent with content-list fetches and PKG downloads.
+
+```json
+"PREFERENCES": {
+  "CONTENT_URLS": { ... },
+  "HTTP_HEADERS": {
+    "User-Agent": "FPKGiPlus"
+  },
+  "HTTP_HEADERS_BY_HOST": {
+    "myserver.com": { "Cookie": "session=abc123" },
+    "other.host":  { "Authorization": "Bearer xyz" }
+  }
+}
+```
+
+- `HTTP_HEADERS` are sent to every host.
+- `HTTP_HEADERS_BY_HOST` are sent only to the host named, and override a same-named global header.
+- A cookie is just a `Cookie` header, so servers that need a session cookie work.
 
 ## Adding content
 
@@ -150,8 +184,9 @@ You can also add or correct details without editing the list by creating `/data/
 | Connections per download | 1–8 parallel connections (default 4). |
 | Install after downloading | Starts the install once a download finishes (off by default). |
 | Delete PKG after successful install | Deletes the PKG only after the console confirms the installed version (off by default). |
-| Skip launcher preflight checks | Skips the launch and system-update checks when FPKGi+ launches a title (on by default). This does not stop Sony's own background update downloads; see **Sony game update downloads** in Settings for how to turn those off. |
-| Content sources | The content-list URL for each category. Leave a URL empty to use local files. |
+| Skip launcher preflight checks | Skips the launch and system-update checks when FPKGi+ launches a title (on by default). Under **Pre-flight checks**. |
+| Block PlayStation Network updates | Removes PlayStation Network update/re-download tasks for games installed as fake packages, which do not run (on by default). Under **Pre-flight checks**; see [Blocking PlayStation Network updates](#blocking-playstation-network-updates). |
+| Content sources | The content-list URL for each category. Leave a URL empty to use local files. Custom cookies or headers go in `config.json`; see [Custom HTTP headers](#custom-http-headers). |
 | Archive.org account | Sign in for downloads that need an account. Your password is not saved. |
 | Populate via web | Use the web URLs instead of local files. |
 | Reload content lists | Reloads all lists. |
